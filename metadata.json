@@ -1,0 +1,6 @@
+
+{
+  "name": "ScriptSource AI",
+  "description": "手寫文字分析與智慧修改建議工具，支援 Google Drive 資料串接。",
+  "requestFramePermissions": ["camera"]
+}
