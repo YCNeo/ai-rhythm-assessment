@@ -6,15 +6,8 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
-    <title>ScriptSource AI - 智慧手寫分析</title>
+    <title>ScriptSource AI - AI 分析與行動建議</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script type="importmap">
-      {
-        "imports": {
-          "@google/genai": "https://esm.sh/@google/genai@^1.40.0"
-        }
-      }
-    </script>
     <style>
       .loading-spinner {
         border: 4px solid #f3f3f3;
@@ -24,49 +17,57 @@
         height: 24px;
         animation: spin 1s linear infinite;
       }
+
       @keyframes spin {
         0% {
           transform: rotate(0deg);
         }
+
         100% {
           transform: rotate(360deg);
         }
       }
+
       .fade-in {
         animation: fadeIn 0.3s ease-out forwards;
       }
+
       @keyframes fadeIn {
         from {
           opacity: 0;
           transform: translateY(5px);
         }
+
         to {
           opacity: 1;
           transform: translateY(0);
         }
       }
+
       input:focus,
       select:focus {
         border-color: #4f46e5;
-        ring-color: #4f46e5;
         outline: none;
         box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
       }
-      select {
-        appearance: none;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: right 1rem center;
-        background-size: 1.25rem;
-      }
-      /* 修正 GAS 可能產生的外層間距 */
+
       body {
         margin: 0;
         padding: 0;
       }
+
+      /* 確保底部按鈕不會被遮擋 */
+      .button-container {
+        pointer-events: none;
+      }
+
+      .button-container button {
+        pointer-events: auto;
+      }
     </style>
   </head>
-  <body class="bg-slate-50 text-slate-900 font-sans pb-32">
+
+  <body class="bg-slate-50 text-slate-900 font-sans pb-40">
     <header
       class="bg-white border-b border-slate-200 px-5 py-4 sticky top-0 z-40 flex items-center justify-center shadow-sm"
     >
@@ -89,7 +90,7 @@
             />
           </svg>
         </div>
-        <h1 class="font-black text-xl tracking-tight">AI 修改助手</h1>
+        <h1 class="font-black text-xl tracking-tight">AI 分析與行動建議</h1>
       </div>
     </header>
 
@@ -111,7 +112,7 @@
             <input
               type="email"
               id="input-email"
-              class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none transition-all"
+              class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"
               placeholder="example@mail.com"
             />
           </div>
@@ -123,25 +124,29 @@
             >
             <select
               id="select-industry"
-              class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none transition-all"
+              class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"
             >
               <option value="" disabled selected>請選擇行業</option>
-              <option value="資訊科技業">資訊科技業</option>
-              <option value="金融保險業">金融保險業</option>
-              <option value="製造業">製造業</option>
-              <option value="教育服務業">教育服務業</option>
-              <option value="醫療保健業">醫療保健業</option>
-              <option value="零售/電子商務">零售/電子商務</option>
-              <option value="媒體與娛樂">媒體與娛樂</option>
-              <option value="專業/顧問服務">專業/顧問服務</option>
-              <option value="餐飲/旅遊業">餐飲/旅遊業</option>
-              <option value="公務機關">公務機關</option>
+              <option value="資訊科技 / 軟體 / 通訊">
+                資訊科技 / 軟體 / 通訊
+              </option>
+              <option value="金融 / 保險 / 證券">金融 / 保險 / 證券</option>
+              <option value="醫療 / 護理 / 生技">醫療 / 護理 / 生技</option>
+              <option value="教育 / 研究 / 補教">教育 / 研究 / 補教</option>
+              <option value="製造 / 營造 / 能源">製造 / 營造 / 能源</option>
+              <option value="零售 / 批發 / 電商">零售 / 批發 / 電商</option>
+              <option value="媒體 / 行銷 / 廣告">媒體 / 行銷 / 廣告</option>
+              <option value="餐飲 / 旅遊 / 休閒">餐飲 / 旅遊 / 休閒</option>
+              <option value="法律 / 會計 / 專業顧問">
+                法律 / 會計 / 專業顧問
+              </option>
+              <option value="公共行政 / 社福">公共行政 / 社福</option>
               <option value="其他">其他</option>
             </select>
             <input
               type="text"
               id="input-industry-other"
-              class="hidden w-full px-4 py-3 bg-white border-2 border-indigo-100 rounded-xl text-sm outline-none fade-in"
+              class="hidden w-full px-4 py-3 bg-white border-2 border-indigo-100 rounded-xl text-sm fade-in mt-2"
               placeholder="請輸入您的行業"
             />
           </div>
@@ -153,23 +158,27 @@
             >
             <select
               id="select-occupation"
-              class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none transition-all"
+              class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"
             >
               <option value="" disabled selected>請選擇職業</option>
-              <option value="管理職">管理職</option>
-              <option value="工程師/技術人員">工程師/技術人員</option>
-              <option value="業務/行銷人員">業務/行銷人員</option>
-              <option value="行政/人力資源">行政/人力資源</option>
-              <option value="醫療/護理人員">醫療/護理人員</option>
-              <option value="教師/研究員">教師/研究員</option>
-              <option value="自由接案/藝術家">自由接案/藝術家</option>
-              <option value="學生">學生</option>
+              <option value="企業主 / 高階主管">企業主 / 高階主管</option>
+              <option value="部門經理 / 中階主管">部門經理 / 中階主管</option>
+              <option value="工程師 / 技術專家">工程師 / 技術專家</option>
+              <option value="行政 / 內勤人員">行政 / 內勤人員</option>
+              <option value="業務 / 客服 / 店員">業務 / 客服 / 店員</option>
+              <option value="行銷 / 企劃 / 公關">行銷 / 企劃 / 公關</option>
+              <option value="設計師 / 創意工作者">設計師 / 創意工作者</option>
+              <option value="醫師 / 護理師 / 藥師">醫師 / 護理師 / 藥師</option>
+              <option value="律師 / 會計師 / 顧問">律師 / 會計師 / 顧問</option>
+              <option value="教師 / 研究人員">教師 / 研究人員</option>
+              <option value="學生 / 在學者">學生 / 在學者</option>
+              <option value="自由工作者 (SOHO)">自由工作者 (SOHO)</option>
               <option value="其他">其他</option>
             </select>
             <input
               type="text"
               id="input-occupation-other"
-              class="hidden w-full px-4 py-3 bg-white border-2 border-indigo-100 rounded-xl text-sm outline-none fade-in"
+              class="hidden w-full px-4 py-3 bg-white border-2 border-indigo-100 rounded-xl text-sm fade-in mt-2"
               placeholder="請輸入您的職業"
             />
           </div>
@@ -178,7 +187,8 @@
 
       <section id="image-grid" class="grid grid-cols-2 gap-3">
         <label
-          class="aspect-square rounded-2xl border-4 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 hover:border-indigo-300 hover:text-indigo-400 transition-all cursor-pointer"
+          id="upload-label"
+          class="aspect-square rounded-2xl border-4 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 hover:border-indigo-300 hover:text-indigo-400 cursor-pointer transition-colors"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -194,8 +204,8 @@
               d="M12 4v16m8-8H4"
             />
           </svg>
-          <span class="text-[10px] font-bold uppercase tracking-tighter"
-            >添加手寫照片</span
+          <span class="text-[10px] font-bold uppercase text-center px-2"
+            >添加手寫照片<br />(可多張)</span
           >
           <input
             type="file"
@@ -212,64 +222,23 @@
         id="error-box"
         class="hidden bg-red-50 text-red-600 p-4 rounded-2xl text-xs font-bold flex items-center gap-3"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="w-5 h-5 flex-shrink-0"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
         <span id="error-msg"></span>
       </div>
 
       <div id="results-area" class="space-y-6 hidden"></div>
 
       <div id="welcome-state" class="py-12 text-center">
-        <div
-          class="w-20 h-20 bg-white rounded-[2rem] shadow-lg flex items-center justify-center mx-auto mb-6 border border-slate-100 text-indigo-500"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="w-10 h-10"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-            />
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
-            />
-          </svg>
-        </div>
-        <h2 class="text-xl font-black text-slate-800 mb-2">
-          填寫資訊並拍攝照片
-        </h2>
-        <p class="text-slate-400 text-xs max-w-[240px] mx-auto leading-relaxed">
-          我們將結合您的背景與系統預設參考資料，為您產出最合適的修改建議。
+        <p class="text-slate-400 text-xs font-medium">
+          填寫基本資訊並拍攝照片以開始 AI 分析
         </p>
       </div>
     </main>
 
-    <div class="fixed bottom-8 left-0 right-0 px-6 z-30">
+    <div class="fixed bottom-8 left-0 right-0 px-6 z-30 button-container">
       <button
         id="btn-analyze"
         disabled
-        class="w-full max-w-md mx-auto h-16 rounded-3xl font-black text-lg shadow-2xl flex items-center justify-center gap-3 transition-all bg-slate-200 text-slate-400 cursor-not-allowed"
+        class="w-full max-w-md mx-auto h-16 rounded-3xl font-black text-lg shadow-2xl flex items-center justify-center gap-3 bg-slate-200 text-slate-400 transition-all active:scale-95"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -291,464 +260,14 @@
       </button>
     </div>
 
-    <script type="module">
-      import { GoogleGenAI, Type } from "@google/genai";
-
-      const FIXED_SOURCES = [
-        {
-          title: "公文寫作標準手冊",
-          content:
-            "正式文書應避免使用口語化詞彙。主旨應明確，內容應條列化。語氣應嚴謹且具公信力。",
-        },
-        {
-          title: "專業技術報告指南",
-          content:
-            "技術術語應精確，數據描述應客觀。若對象為工程師，應提供具體細節；若為管理層，則應強調效益與結果。",
-        },
-        {
-          title: "商務溝通禮儀",
-          content:
-            "對外電子郵件應包含正式問候與署名。表達請求時應委婉，感謝時應真誠。",
-        },
-      ];
-
-      const state = {
-        images: [],
-        isAnalyzing: false,
-        userInfo: {
-          email: "",
-          industry: "",
-          industryOther: "",
-          occupation: "",
-          occupationOther: "",
-        },
-      };
-
-      const elements = {
-        inputEmail: document.getElementById("input-email"),
-        selectIndustry: document.getElementById("select-industry"),
-        inputIndustryOther: document.getElementById("input-industry-other"),
-        selectOccupation: document.getElementById("select-occupation"),
-        inputOccupationOther: document.getElementById("input-occupation-other"),
-        inputImages: document.getElementById("input-images"),
-        imageGrid: document.getElementById("image-grid"),
-        btnAnalyze: document.getElementById("btn-analyze"),
-        btnText: document.getElementById("btn-text"),
-        loader: document.getElementById("loader"),
-        iconSend: document.getElementById("icon-send"),
-        errorBox: document.getElementById("error-box"),
-        errorMsg: document.getElementById("error-msg"),
-        resultsArea: document.getElementById("results-area"),
-        welcomeState: document.getElementById("welcome-state"),
-      };
-
-      const handleInfoChange = () => {
-        state.userInfo.email = elements.inputEmail.value;
-        state.userInfo.industry = elements.selectIndustry.value;
-        state.userInfo.industryOther = elements.inputIndustryOther.value;
-        state.userInfo.occupation = elements.selectOccupation.value;
-        state.userInfo.occupationOther = elements.inputOccupationOther.value;
-
-        if (state.userInfo.industry === "其他") {
-          elements.inputIndustryOther.classList.remove("hidden");
-        } else {
-          elements.inputIndustryOther.classList.add("hidden");
-          elements.inputIndustryOther.value = "";
-          state.userInfo.industryOther = "";
+    <script type="importmap">
+      {
+        "imports": {
+          "@google/genai": "https://esm.sh/@google/genai@^1.40.0"
         }
-
-        if (state.userInfo.occupation === "其他") {
-          elements.inputOccupationOther.classList.remove("hidden");
-        } else {
-          elements.inputOccupationOther.classList.add("hidden");
-          elements.inputOccupationOther.value = "";
-          state.userInfo.occupationOther = "";
-        }
-
-        updateAnalyzeButton();
-      };
-
-      elements.inputEmail.addEventListener("input", handleInfoChange);
-      elements.selectIndustry.addEventListener("change", handleInfoChange);
-      elements.inputIndustryOther.addEventListener("input", handleInfoChange);
-      elements.selectOccupation.addEventListener("change", handleInfoChange);
-      elements.inputOccupationOther.addEventListener("input", handleInfoChange);
-
-      elements.inputImages.onchange = (e) => {
-        const files = Array.from(e.target.files);
-        if (state.images.length + files.length > 10) {
-          showError("上限 10 張照片。");
-          return;
-        }
-
-        files.forEach((file) => {
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            const base64 = event.target.result;
-            const id = Math.random().toString(36).substr(2, 9);
-            state.images.push({
-              id,
-              file,
-              base64,
-              preview: URL.createObjectURL(file),
-            });
-            renderImages();
-          };
-          reader.readAsDataURL(file);
-        });
-      };
-
-      elements.btnAnalyze.onclick = async () => {
-        if (state.isAnalyzing || !isReady()) return;
-        setLoading(true);
-        showError(null);
-
-        try {
-          const result = await runAnalysis();
-          renderResults(result);
-
-          // 如果是在 GAS 環境，可選擇上傳紀錄
-          if (
-            typeof google !== "undefined" &&
-            google.script &&
-            google.script.run
-          ) {
-            google.script.run
-              .withSuccessHandler(() => console.log("Log saved"))
-              .saveData({
-                email: state.userInfo.email,
-                summary: result.summary,
-              });
-          }
-        } catch (err) {
-          showError(err.message || "分析失敗");
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      function isReady() {
-        const emailFilled = state.userInfo.email.trim() !== "";
-        const industryReady =
-          state.userInfo.industry !== "" &&
-          (state.userInfo.industry !== "其他" ||
-            state.userInfo.industryOther.trim() !== "");
-        const occupationReady =
-          state.userInfo.occupation !== "" &&
-          (state.userInfo.occupation !== "其他" ||
-            state.userInfo.occupationOther.trim() !== "");
-        const imagesReady = state.images.length > 0;
-        return emailFilled && industryReady && occupationReady && imagesReady;
-      }
-
-      function renderImages() {
-        const label = elements.imageGrid.querySelector("label");
-        elements.imageGrid.innerHTML = "";
-        elements.imageGrid.appendChild(label);
-        state.images.forEach((img) => {
-          const div = document.createElement("div");
-          div.className =
-            "relative aspect-square rounded-2xl overflow-hidden shadow-sm bg-white border border-slate-200 fade-in";
-          div.innerHTML = `
-          <img src="${img.preview}" class="w-full h-full object-cover">
-          <button class="absolute top-2 right-2 p-1.5 bg-red-500/80 text-white rounded-full backdrop-blur-sm" onclick="window.removeImg('${img.id}')">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-          </button>
-        `;
-          elements.imageGrid.insertBefore(div, label);
-        });
-        updateAnalyzeButton();
-      }
-<!DOCTYPE html>
-<html lang="zh-TW">
-
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>ScriptSource AI - AI 分析與行動建議</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    .loading-spinner {
-      border: 4px solid #f3f3f3;
-      border-top: 4px solid #4f46e5;
-      border-radius: 50%;
-      width: 24px;
-      height: 24px;
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-      0% {
-        transform: rotate(0deg);
-      }
-
-      100% {
-        transform: rotate(360deg);
-      }
-    }
-
-    .fade-in {
-      animation: fadeIn 0.3s ease-out forwards;
-    }
-
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-        transform: translateY(5px);
-      }
-
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    input:focus,
-    select:focus {
-      border-color: #4f46e5;
-      outline: none;
-      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
-    }
-
-    body {
-      margin: 0;
-      padding: 0;
-    }
-
-    /* 確保底部按鈕不會被遮擋 */
-    .button-container {
-      pointer-events: none;
-    }
-
-    .button-container button {
-      pointer-events: auto;
-    }
-  </style>
-</head>
-
-<body class="bg-slate-50 text-slate-900 font-sans pb-40">
-
-  <header
-    class="bg-white border-b border-slate-200 px-5 py-4 sticky top-0 z-40 flex items-center justify-center shadow-sm">
-    <div class="flex items-center gap-3">
-      <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-md">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24"
-          stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-      </div>
-      <h1 class="font-black text-xl tracking-tight">AI 分析與行動建議</h1>
-    </div>
-  </header>
-
-  <main class="max-w-md mx-auto p-5 space-y-6">
-    <section class="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4">
-      <h2 class="text-sm font-black text-slate-400 uppercase tracking-widest mb-2">基本資訊</h2>
-      <div class="space-y-4">
-        <div>
-          <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">電子郵件</label>
-          <input type="email" id="input-email" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm" placeholder="example@mail.com">
-        </div>
-
-        <div class="space-y-2">
-          <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">行業別</label>
-          <select id="select-industry" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm">
-            <option value="" disabled selected>請選擇行業</option>
-            <option value="資訊科技 / 軟體 / 通訊">資訊科技 / 軟體 / 通訊</option>
-            <option value="金融 / 保險 / 證券">金融 / 保險 / 證券</option>
-            <option value="醫療 / 護理 / 生技">醫療 / 護理 / 生技</option>
-            <option value="教育 / 研究 / 補教">教育 / 研究 / 補教</option>
-            <option value="製造 / 營造 / 能源">製造 / 營造 / 能源</option>
-            <option value="零售 / 批發 / 電商">零售 / 批發 / 電商</option>
-            <option value="媒體 / 行銷 / 廣告">媒體 / 行銷 / 廣告</option>
-            <option value="餐飲 / 旅遊 / 休閒">餐飲 / 旅遊 / 休閒</option>
-            <option value="法律 / 會計 / 專業顧問">法律 / 會計 / 專業顧問</option>
-            <option value="公共行政 / 社福">公共行政 / 社福</option>
-            <option value="其他">其他</option>
-          </select>
-          <input type="text" id="input-industry-other" class="hidden w-full px-4 py-3 bg-white border-2 border-indigo-100 rounded-xl text-sm fade-in mt-2" placeholder="請輸入您的行業">
-        </div>
-
-        <div class="space-y-2">
-          <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">職業別</label>
-          <select id="select-occupation" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm">
-            <option value="" disabled selected>請選擇職業</option>
-            <option value="企業主 / 高階主管">企業主 / 高階主管</option>
-            <option value="部門經理 / 中階主管">部門經理 / 中階主管</option>
-            <option value="工程師 / 技術專家">工程師 / 技術專家</option>
-            <option value="行政 / 內勤人員">行政 / 內勤人員</option>
-            <option value="業務 / 客服 / 店員">業務 / 客服 / 店員</option>
-            <option value="行銷 / 企劃 / 公關">行銷 / 企劃 / 公關</option>
-            <option value="設計師 / 創意工作者">設計師 / 創意工作者</option>
-            <option value="醫師 / 護理師 / 藥師">醫師 / 護理師 / 藥師</option>
-            <option value="律師 / 會計師 / 顧問">律師 / 會計師 / 顧問</option>
-            <option value="教師 / 研究人員">教師 / 研究人員</option>
-            <option value="學生 / 在學者">學生 / 在學者</option>
-            <option value="自由工作者 (SOHO)">自由工作者 (SOHO)</option>
-            <option value="其他">其他</option>
-          </select>
-          <input type="text" id="input-occupation-other" class="hidden w-full px-4 py-3 bg-white border-2 border-indigo-100 rounded-xl text-sm fade-in mt-2" placeholder="請輸入您的職業">
-        </div>
-      </div>
-    </section>
-
-    <section id="image-grid" class="grid grid-cols-2 gap-3">
-      <label id="upload-label" class="aspect-square rounded-2xl border-4 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 hover:border-indigo-300 hover:text-indigo-400 cursor-pointer transition-colors">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-        <span class="text-[10px] font-bold uppercase text-center px-2">添加手寫照片<br>(可多張)</span>
-        <input type="file" id="input-images" multiple accept="image/*" capture="environment" class="hidden">
-      </label>
-    </section>
-
-    <div id="error-box" class="hidden bg-red-50 text-red-600 p-4 rounded-2xl text-xs font-bold flex items-center gap-3">
-      <span id="error-msg"></span>
-    </div>
-
-    <div id="results-area" class="space-y-6 hidden"></div>
-
-    <div id="welcome-state" class="py-12 text-center">
-      <p class="text-slate-400 text-xs font-medium">填寫基本資訊並拍攝照片以開始 AI 分析</p>
-    </div>
-  </main>
-
-  <div class="fixed bottom-8 left-0 right-0 px-6 z-30 button-container">
-    <button id="btn-analyze" disabled class="w-full max-w-md mx-auto h-16 rounded-3xl font-black text-lg shadow-2xl flex items-center justify-center gap-3 bg-slate-200 text-slate-400 transition-all active:scale-95">
-      <svg xmlns="http://www.w3.org/2000/svg" id="icon-send" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-      <div id="loader" class="loading-spinner hidden"></div>
-      <span id="btn-text">請填寫完整資訊</span>
-    </button>
-  </div>
-
-  <script type="importmap">
-    {
-    "imports": {
-      "@google/genai": "https://esm.sh/@google/genai@^1.40.0"
-    }
-  }
-  </script>
-
-  <?!= include('javascript'); ?>
-</body>
-
-</html>
-      window.removeImg = (id) => {
-        state.images = state.images.filter((img) => img.id !== id);
-        renderImages();
-      };
-
-      function updateAnalyzeButton() {
-        const ready = isReady();
-        elements.btnAnalyze.disabled = !ready || state.isAnalyzing;
-        elements.btnAnalyze.className = `w-full max-w-md mx-auto h-16 rounded-3xl font-black text-lg shadow-2xl flex items-center justify-center gap-3 transition-all ${!ready || state.isAnalyzing ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-indigo-600 text-white active:scale-95 shadow-indigo-300"}`;
-        if (state.isAnalyzing) elements.btnText.innerText = "分析中...";
-        else if (!ready) elements.btnText.innerText = "請填寫完整資訊";
-        else
-          elements.btnText.innerText = `開始分析 (${state.images.length} 張)`;
-      }
-
-      function setLoading(loading) {
-        state.isAnalyzing = loading;
-        elements.loader.classList.toggle("hidden", !loading);
-        elements.iconSend.classList.toggle("hidden", loading);
-        updateAnalyzeButton();
-      }
-
-      function showError(msg) {
-        if (!msg) {
-          elements.errorBox.classList.add("hidden");
-          return;
-        }
-        elements.errorMsg.innerText = msg;
-        elements.errorBox.classList.remove("hidden");
-      }
-
-      async function runAnalysis() {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const sourceContext = FIXED_SOURCES.map(
-          (s, i) => `【資料源 ${i + 1}：${s.title}】\n${s.content}`,
-        ).join("\n\n---\n\n");
-        const imageParts = state.images.map((img) => ({
-          inlineData: {
-            mimeType: img.file.type,
-            data: img.base64.split(",")[1],
-          },
-        }));
-        const finalInd =
-          state.userInfo.industry === "其他"
-            ? state.userInfo.industryOther
-            : state.userInfo.industry;
-        const finalOcc =
-          state.userInfo.occupation === "其他"
-            ? state.userInfo.occupationOther
-            : state.userInfo.occupation;
-        const userContext = `作者背景資訊：行業別: ${finalInd}, 職業別: ${finalOcc}, 電子郵件: ${state.userInfo.email}。`;
-        const response = await ai.models.generateContent({
-          model: "gemini-3-pro-preview",
-          contents: {
-            parts: [
-              ...imageParts,
-              {
-                text: `系統固定參考來源如下：\n${sourceContext}\n\n${userContext}\n\n請根據以上參考資料，分析附加圖片中的手寫文字（對話內容），並針對文字品質、語氣、專業度提供具體的修改建議。`,
-              },
-            ],
-          },
-          config: {
-            systemInstruction:
-              "你是一個專業內容修改助理。請轉錄手寫文字並比對參考資料提供修改建議。格式必須為 JSON。",
-            thinkingConfig: { thinkingBudget: 24576 },
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                summary: { type: Type.STRING },
-                suggestions: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      originalText: { type: Type.STRING },
-                      suggestedEdit: { type: Type.STRING },
-                      reason: { type: Type.STRING },
-                    },
-                    required: ["originalText", "suggestedEdit", "reason"],
-                  },
-                },
-              },
-              required: ["summary", "suggestions"],
-            },
-          },
-        });
-        return JSON.parse(response.text);
-      }
-
-      function renderResults(result) {
-        elements.welcomeState.classList.add("hidden");
-        elements.resultsArea.classList.remove("hidden");
-        elements.resultsArea.innerHTML = `
-        <div class="bg-white p-6 rounded-[2.5rem] shadow-xl border border-slate-100 fade-in">
-          <h2 class="text-xl font-black mb-2 flex items-center gap-2">摘要</h2>
-          <p class="text-slate-600 italic leading-relaxed">${result.summary}</p>
-        </div>
-        <div class="space-y-4">
-          ${result.suggestions
-            .map(
-              (s, i) => `
-            <div class="bg-white rounded-3xl border border-slate-100 shadow-md p-5 fade-in">
-              <span class="text-[10px] font-black text-slate-300 uppercase block mb-1">原始</span>
-              <p class="text-slate-400 text-sm line-through opacity-60 mb-3">${s.originalText}</p>
-              <span class="text-[10px] font-black text-indigo-400 uppercase block mb-1">建議</span>
-              <p class="text-indigo-900 font-bold text-base mb-3">${s.suggestedEdit}</p>
-              <span class="text-[10px] font-black text-amber-500 uppercase block mb-1">原因</span>
-              <p class="text-slate-600 text-xs">${s.reason}</p>
-            </div>
-          `,
-            )
-            .join("")}
-        </div>
-      `;
-        elements.resultsArea.scrollIntoView({ behavior: "smooth" });
       }
     </script>
+
+    <?!= include('javascript'); ?>
   </body>
 </html>
