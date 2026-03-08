@@ -145,18 +145,10 @@ function saveData(payload) {
  */
 function saveQuestionnaireResponse(payload) {
   try {
-    const root = getRootFolder();
-    const files = root.getFilesByName("問卷作答紀錄");
-    let ss;
-
-    if (files.hasNext()) {
-      ss = SpreadsheetApp.open(files.next());
-    } else {
-      ss = SpreadsheetApp.create("問卷作答紀錄");
-      const ssFile = DriveApp.getFileById(ss.getId());
-      root.addFile(ssFile);
-      DriveApp.getRootFolder().removeFile(ssFile);
-    }
+    const ss = getOrCreateNamedSpreadsheet_(
+      "問卷作答紀錄",
+      "QUESTIONNAIRE_RECORD_SHEET_ID",
+    );
 
     const today = Utilities.formatDate(
       new Date(),
@@ -251,10 +243,6 @@ function sendReportPdf(payload) {
       reportText: reportText,
     });
 
-    const root = getRootFolder();
-    const pdfFolder = getOrCreateSubFolder_(root, "問卷報告PDF");
-    const pdfFile = pdfFolder.createFile(pdfBlob);
-
     const ownerEmail = "";
     const mailOptions = {
       to: email,
@@ -275,8 +263,8 @@ function sendReportPdf(payload) {
       versionTitle: versionTitle,
       answers: answers,
       reportText: reportText,
-      pdfFileId: pdfFile.getId(),
-      pdfFileUrl: pdfFile.getUrl(),
+      pdfFileId: "",
+      pdfFileUrl: "",
       emailSentTo: email,
       emailBcc: ownerEmail || "",
       mailQuotaBefore: remainingQuota,
@@ -286,8 +274,8 @@ function sendReportPdf(payload) {
     return {
       status: "OK",
       message: "PDF 已寄送，若未收到請檢查垃圾郵件匣。",
-      pdfFileId: pdfFile.getId(),
-      pdfFileUrl: pdfFile.getUrl(),
+      pdfFileId: "",
+      pdfFileUrl: "",
       sentTo: email,
       bcc: "",
       mailQuotaBefore: remainingQuota,
@@ -577,17 +565,10 @@ function getOrCreateSubFolder_(parentFolder, name) {
 }
 
 function saveReportRecord_(payload) {
-  const root = getRootFolder();
-  const files = root.getFilesByName("問卷報告紀錄");
-  let ss;
-  if (files.hasNext()) {
-    ss = SpreadsheetApp.open(files.next());
-  } else {
-    ss = SpreadsheetApp.create("問卷報告紀錄");
-    const ssFile = DriveApp.getFileById(ss.getId());
-    root.addFile(ssFile);
-    DriveApp.getRootFolder().removeFile(ssFile);
-  }
+  const ss = getOrCreateNamedSpreadsheet_(
+    "問卷報告紀錄",
+    "REPORT_RECORD_SHEET_ID",
+  );
 
   const today = Utilities.formatDate(
     new Date(),
@@ -663,6 +644,22 @@ function escapeHtml_(text) {
     .replace(/'/g, "&#39;");
 }
 
+function getOrCreateNamedSpreadsheet_(title, propertyKey) {
+  const props = PropertiesService.getScriptProperties();
+  const existingId = props.getProperty(propertyKey);
+  if (existingId) {
+    try {
+      return SpreadsheetApp.openById(existingId);
+    } catch (e) {
+      // fallback to recreate below
+    }
+  }
+
+  const ss = SpreadsheetApp.create(title);
+  props.setProperty(propertyKey, ss.getId());
+  return ss;
+}
+
 /**
  * 手動觸發授權用：請在 GAS 編輯器直接執行一次
  */
@@ -672,7 +669,6 @@ function authorizeRequiredScopes() {
     muteHttpExceptions: true,
   });
   MailApp.getRemainingDailyQuota();
-  DriveApp.getRootFolder().getName();
-  SpreadsheetApp.create("權限初始化測試_" + new Date().getTime()).getId();
+  SpreadsheetApp.getActive();
   return "OK";
 }
