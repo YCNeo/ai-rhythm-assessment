@@ -26,7 +26,6 @@
     successBox: document.getElementById("success-box"),
     reportModal: document.getElementById("report-modal"),
     reportContent: document.getElementById("report-content"),
-    reportSendStatus: document.getElementById("report-send-status"),
     btnCloseModal: document.getElementById("btn-close-modal"),
     btnSendPdf: document.getElementById("btn-send-pdf"),
   };
@@ -216,51 +215,13 @@
 
   function openReportModal(reportText) {
     el.reportContent.innerHTML = markdownToHtml(reportText || "");
-    if (el.reportSendStatus) {
-      el.reportSendStatus.textContent = "";
-      el.reportSendStatus.className =
-        "w-full md:flex-1 text-xs text-slate-500 leading-6";
-    }
     el.reportModal.classList.remove("hidden");
     document.body.classList.add("overflow-hidden");
-
-    if (window.google && google.script && google.script.run) {
-      google.script.run
-        .withSuccessHandler((result) => {
-          if (!result || result.status !== "OK") {
-            setReportSendStatus(
-              `寄信檢查失敗：${(result && result.message) || "未知錯誤"}`,
-              "error",
-            );
-            return;
-          }
-          setReportSendStatus(
-            `寄信檢查通過，可寄送。今日剩餘配額：${result.quota}`,
-            "info",
-          );
-        })
-        .withFailureHandler((err) => {
-          setReportSendStatus(`寄信檢查失敗：${err.message || err}`, "error");
-        })
-        .checkMailCapability();
-    }
   }
 
   function closeReportModal() {
     el.reportModal.classList.add("hidden");
     document.body.classList.remove("overflow-hidden");
-  }
-
-  function setReportSendStatus(message, tone) {
-    if (!el.reportSendStatus) return;
-    const toneClass =
-      tone === "error"
-        ? "text-red-600"
-        : tone === "success"
-          ? "text-emerald-700"
-          : "text-slate-500";
-    el.reportSendStatus.className = `w-full md:flex-1 text-xs leading-6 ${toneClass}`;
-    el.reportSendStatus.textContent = message || "";
   }
 
   function formatInlineMarkdown(text) {
@@ -363,6 +324,7 @@
   function collectAnswers() {
     const questions = questionnaire.questions || [];
     const answers = [];
+    const missingTitles = [];
 
     for (const q of questions) {
       let value = "";
@@ -378,7 +340,7 @@
       }
 
       if (q.required && !value) {
-        throw new Error(`請完成必填題目：「${q.title}」`);
+        missingTitles.push(q.title);
       }
 
       answers.push({
@@ -388,15 +350,23 @@
       });
     }
 
+    if (missingTitles.length) {
+      throw new Error(
+        `請完成所有必填題目：${missingTitles
+          .map((title) => `「${title}」`)
+          .join("、")}`,
+      );
+    }
+
     return answers;
   }
 
   function validateRespondent(name, email) {
-    if (!name) {
-      throw new Error("請輸入姓名。");
-    }
-    if (!email) {
-      throw new Error("請輸入電子郵件。");
+    const missing = [];
+    if (!name) missing.push("姓名");
+    if (!email) missing.push("電子郵件");
+    if (missing.length) {
+      throw new Error(`請填寫：${missing.join("、")}。`);
     }
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailPattern.test(email)) {
@@ -453,7 +423,7 @@
             "PDF 已先建立完成，確認後可直接寄信。",
             "success",
           );
-          showSuccess("問卷已完成分析並建立 PDF，請確認後寄送。");
+          showSuccess("問卷已完成分析，請確認後寄送。");
         })
         .withFailureHandler((err) => {
           el.submitBtn.disabled = false;
@@ -480,36 +450,28 @@
 
     if (!base || !reportText || !pdfFileId) {
       showError("找不到可寄送的報告內容，請先送出問卷並完成分析。");
-      setReportSendStatus("找不到可寄送的報告內容。", "error");
       return;
     }
 
     el.btnSendPdf.disabled = true;
     el.btnSendPdf.textContent = "寄送中...";
-    setReportSendStatus("正在確認授權與寄信配額，請稍候...", "info");
 
     google.script.run
       .withSuccessHandler((result) => {
         el.btnSendPdf.disabled = false;
-        el.btnSendPdf.textContent = "轉成 PDF 並寄到信箱";
+        el.btnSendPdf.textContent = "寄到信箱";
         if (result && result.status === "OK") {
-          showSuccess("PDF 已寄到你的信箱，並已記錄到試算表。");
-          setReportSendStatus(
-            `寄送成功：收件者 ${result.sentTo || base.email}，副本 ${result.bcc || "無"}。`,
-            "success",
-          );
+          showSuccess("PDF 已寄到你的信箱。");
         } else {
           const msg = `寄送失敗：${(result && result.message) || "未知錯誤"}`;
           showError(msg);
-          setReportSendStatus(msg, "error");
         }
       })
       .withFailureHandler((err) => {
         el.btnSendPdf.disabled = false;
-        el.btnSendPdf.textContent = "轉成 PDF 並寄到信箱";
+        el.btnSendPdf.textContent = "寄到信箱";
         const msg = `寄送失敗：${err.message || err}`;
         showError(msg);
-        setReportSendStatus(msg, "error");
       })
       .sendReportPdf({
         name: base.name,

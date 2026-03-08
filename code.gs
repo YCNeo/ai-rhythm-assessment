@@ -192,6 +192,7 @@ function saveQuestionnaireResponse(payload) {
 function generateAiReport(payload) {
   try {
     const safePayload = {
+      studentName: payload && payload.studentName ? payload.studentName : "",
       versionId: payload && payload.versionId ? payload.versionId : "v1",
       versionTitle: payload && payload.versionTitle ? payload.versionTitle : "",
       answers: (payload && payload.answers) || [],
@@ -234,6 +235,7 @@ function processQuestionnaireSubmission(payload) {
     }
 
     const reportResult = generateAiReport({
+      studentName: name,
       versionId: versionId,
       versionTitle: versionTitle,
       answers: answers,
@@ -251,7 +253,8 @@ function processQuestionnaireSubmission(payload) {
     });
 
     const root = getRootFolder();
-    const pdfFile = root.createFile(pdfBlob);
+    const pdfFolder = getOrCreateSubFolder_(root, "gemini回應");
+    const pdfFile = pdfFolder.createFile(pdfBlob);
     const submissionId =
       Utilities.formatDate(
         new Date(),
@@ -327,7 +330,8 @@ function sendReportPdf(payload) {
         reportText: reportText,
       });
       const root = getRootFolder();
-      const file = root.createFile(pdfBlob);
+      const pdfFolder = getOrCreateSubFolder_(root, "gemini回應");
+      const file = pdfFolder.createFile(pdfBlob);
       resolvedPdfFileId = file.getId();
       resolvedPdfFileUrl = file.getUrl();
     }
@@ -344,40 +348,6 @@ function sendReportPdf(payload) {
     };
     MailApp.sendEmail(mailOptions);
     const quotaAfter = MailApp.getRemainingDailyQuota();
-
-    saveReportRecord_({
-      name: name,
-      email: email,
-      versionId: versionId,
-      versionTitle: versionTitle,
-      answers: [],
-      reportText: reportText,
-      pdfFileId: resolvedPdfFileId || "",
-      pdfFileUrl: resolvedPdfFileUrl || "",
-      emailSentTo: email,
-      emailBcc: ownerEmail || "",
-      mailQuotaBefore: remainingQuota,
-      mailQuotaAfter: quotaAfter,
-    });
-
-    // 保險補寫：若提交階段漏寫，寄信階段至少仍會留下核心紀錄
-    saveSubmissionRecord_({
-      submissionId:
-        (payload && payload.submissionId) ||
-        Utilities.formatDate(
-          new Date(),
-          Session.getScriptTimeZone(),
-          "yyyyMMddHHmmss",
-        ) + "_mail",
-      name: name,
-      email: email,
-      versionId: versionId || "",
-      versionTitle: versionTitle || "",
-      pdfFileId: resolvedPdfFileId || "",
-      pdfFileUrl: resolvedPdfFileUrl || "",
-      answers: [],
-      reportText: reportText || "",
-    });
 
     return {
       status: "OK",
@@ -397,6 +367,7 @@ function sendReportPdf(payload) {
 
 function buildGeminiPromptFromAnswers_(payload) {
   const versionLabel = payload.versionTitle || payload.versionId || "v1";
+  const studentName = payload.studentName || "學員";
   const mergedDocText = replaceSecondPartInDocxText_(
     DOCX_RAW_TEXT,
     versionLabel,
@@ -406,6 +377,7 @@ function buildGeminiPromptFromAnswers_(payload) {
 
   return `
 你是一位節奏工作法顧問，請根據以下文字內容生成個人化解析報告。
+請稱呼學員姓名為：「${studentName}」。
 
 【原始文件內容（全文）】
 ${mergedDocText}
@@ -665,12 +637,14 @@ function buildReportPdfBlob_(payload) {
     .getBlob()
     .getAs(MimeType.PDF)
     .setName(
-      "節奏工作法報告_" +
+      "節奏工作法公開課報告_" +
         Utilities.formatDate(
           new Date(),
           Session.getScriptTimeZone(),
-          "yyyyMMdd_HHmmss",
+          "yyyyMMdd",
         ) +
+        "_" +
+        sanitizeFilename_(safeName) +
         ".pdf",
     );
   return pdfBlob;
@@ -775,60 +749,8 @@ function getOrCreateSubFolder_(parentFolder, name) {
   return parentFolder.createFolder(name);
 }
 
-function saveReportRecord_(payload) {
-  const ss = getOrCreateNamedSpreadsheet_(
-    "問卷報告紀錄",
-    "REPORT_RECORD_SHEET_ID",
-  );
-
-  const today = Utilities.formatDate(
-    new Date(),
-    Session.getScriptTimeZone(),
-    "yyyy-MM-dd",
-  );
-  let sheet = ss.getSheetByName(today);
-  if (!sheet) {
-    sheet = ss.insertSheet(today);
-    sheet.appendRow([
-      "時間",
-      "作答者姓名",
-      "作答者電子郵件",
-      "版本編號",
-      "版本標題",
-      "PDF檔案ID",
-      "PDF檔案網址",
-      "寄送收件者",
-      "寄送副本(BCC)",
-      "寄送前剩餘配額",
-      "寄送後剩餘配額",
-      "答案(JSON)",
-      "AI回傳文字",
-    ]);
-    sheet.setFrozenRows(1);
-  }
-
-  sheet.appendRow([
-    new Date(),
-    payload.name || "",
-    payload.email || "",
-    payload.versionId || "",
-    payload.versionTitle || "",
-    payload.pdfFileId || "",
-    payload.pdfFileUrl || "",
-    payload.emailSentTo || "",
-    payload.emailBcc || "",
-    payload.mailQuotaBefore || "",
-    payload.mailQuotaAfter || "",
-    JSON.stringify(payload.answers || []),
-    payload.reportText || "",
-  ]);
-}
-
 function saveSubmissionRecord_(payload) {
-  const ss = getOrCreateNamedSpreadsheet_(
-    "問卷填答與報告紀錄",
-    "SUBMISSION_RECORD_SHEET_ID",
-  );
+  const ss = getOrCreateCourseRecordSpreadsheet_();
 
   const today = Utilities.formatDate(
     new Date(),
@@ -838,32 +760,15 @@ function saveSubmissionRecord_(payload) {
   let sheet = ss.getSheetByName(today);
   if (!sheet) {
     sheet = ss.insertSheet(today);
-    sheet.appendRow([
-      "時間",
-      "提交ID",
-      "姓名",
-      "Email",
-      "PDF檔案ID",
-      "PDF檔案網址",
-      "版本編號",
-      "版本標題",
-      "答案(JSON)",
-      "AI回傳文字",
-    ]);
+    sheet.appendRow(["時間", "姓名", "Email", "PDF檔案網址"]);
     sheet.setFrozenRows(1);
   }
 
   sheet.appendRow([
     new Date(),
-    payload.submissionId || "",
     payload.name || "",
     payload.email || "",
-    payload.pdfFileId || "",
     payload.pdfFileUrl || "",
-    payload.versionId || "",
-    payload.versionTitle || "",
-    JSON.stringify(payload.answers || []),
-    payload.reportText || "",
   ]);
 }
 
