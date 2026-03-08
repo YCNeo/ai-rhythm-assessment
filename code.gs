@@ -193,3 +193,336 @@ function saveQuestionnaireResponse(payload) {
     return "Error: " + e.toString();
   }
 }
+
+/**
+ * 產生 AI 解析報告（不包含姓名與 email）
+ */
+function generateAiReport(payload) {
+  try {
+    const safePayload = {
+      versionId: payload && payload.versionId ? payload.versionId : "v1",
+      versionTitle: payload && payload.versionTitle ? payload.versionTitle : "",
+      answers: (payload && payload.answers) || [],
+    };
+
+    const prompt = buildGeminiPromptFromAnswers_(safePayload);
+    const reportText = callGeminiText_(prompt);
+
+    return {
+      reportText: reportText,
+      versionId: safePayload.versionId,
+      versionTitle: safePayload.versionTitle,
+      createdAt: new Date().toISOString(),
+    };
+  } catch (e) {
+    throw new Error("AI 生成失敗: " + e.toString());
+  }
+}
+
+/**
+ * 將 AI 報告轉 PDF 並寄送給使用者，並寫入試算表紀錄
+ */
+function sendReportPdf(payload) {
+  try {
+    const name = payload && payload.name ? payload.name : "";
+    const email = payload && payload.email ? payload.email : "";
+    const versionId = payload && payload.versionId ? payload.versionId : "v1";
+    const versionTitle =
+      payload && payload.versionTitle ? payload.versionTitle : "";
+    const answers = (payload && payload.answers) || [];
+    const reportText = payload && payload.reportText ? payload.reportText : "";
+
+    if (!email) {
+      return { status: "ERROR", message: "缺少 email，無法寄送 PDF。" };
+    }
+    if (!reportText) {
+      return { status: "ERROR", message: "缺少 AI 報告內容，無法產生 PDF。" };
+    }
+
+    const pdfBlob = buildReportPdfBlob_({
+      name: name,
+      versionId: versionId,
+      versionTitle: versionTitle,
+      reportText: reportText,
+    });
+
+    const root = getRootFolder();
+    const pdfFolder = getOrCreateSubFolder_(root, "問卷報告PDF");
+    const pdfFile = pdfFolder.createFile(pdfBlob);
+
+    MailApp.sendEmail({
+      to: email,
+      subject: "你的節奏工作法個人化解析報告",
+      body: "您好，附件為本次問卷的 AI 個人化解析報告（PDF）。",
+      attachments: [pdfBlob],
+    });
+
+    saveReportRecord_({
+      name: name,
+      email: email,
+      versionId: versionId,
+      versionTitle: versionTitle,
+      answers: answers,
+      reportText: reportText,
+      pdfFileId: pdfFile.getId(),
+      pdfFileUrl: pdfFile.getUrl(),
+    });
+
+    return {
+      status: "OK",
+      message: "PDF 已寄送",
+      pdfFileId: pdfFile.getId(),
+      pdfFileUrl: pdfFile.getUrl(),
+    };
+  } catch (e) {
+    return { status: "ERROR", message: e.toString() };
+  }
+}
+
+function buildGeminiPromptFromAnswers_(payload) {
+  const versionLabel = payload.versionTitle || payload.versionId || "v1";
+  const mergedDocText = replaceSecondPartInDocxText_(
+    DOCX_RAW_TEXT,
+    versionLabel,
+    payload.versionId,
+    payload.answers || [],
+  );
+
+  return `
+你是一位節奏工作法顧問，請根據以下文字內容生成個人化解析報告。
+
+【原始文件內容（全文）】
+${mergedDocText}
+
+請用繁體中文輸出完整、可執行的個人化解析報告。
+`;
+}
+
+function buildVersionSecondPartWithAnswers_(versionLabel, versionId, answers) {
+  const questionnaire = getQuestionnaireById(versionId || "v1");
+  const answerMap = {};
+  (answers || []).forEach((item) => {
+    const key = item && item.questionId ? String(item.questionId) : "";
+    if (!key) return;
+    answerMap[key] =
+      item && item.answer !== undefined && item.answer !== null
+        ? String(item.answer)
+        : "";
+  });
+
+  const secondPartQuestions = (questionnaire.questions || []).filter((q) => {
+    return q && q.section && q.section.indexOf("維度") === 0;
+  });
+
+  if (!secondPartQuestions.length) {
+    return "（此版本沒有第二部分題目）";
+  }
+
+  let currentSection = "";
+  const lines = [
+    "### 第二部分：個人化節奏診斷問卷內容",
+    "",
+    "版本：" + versionLabel,
+    "本問卷分為五個維度，學員需根據過去一週的實際狀況進行評分（1-5分）或選項勾選。",
+  ];
+  secondPartQuestions.forEach((q, index) => {
+    if (q.section !== currentSection) {
+      currentSection = q.section;
+      lines.push("");
+      lines.push("#### " + currentSection);
+    }
+    const answer = answerMap[String(q.id)] || "（未作答）";
+    lines.push(`- ${q.title}`);
+    lines.push(`  - 學員回答：${answer}`);
+  });
+
+  return lines.join("\n").trim();
+}
+
+function replaceSecondPartInDocxText_(
+  docText,
+  versionLabel,
+  versionId,
+  answers,
+) {
+  const secondPartBlock = buildVersionSecondPartWithAnswers_(
+    versionLabel,
+    versionId,
+    answers,
+  );
+
+  const startMarker = "### 第二部分：個人化節奏診斷問卷內容";
+  const endMarker = "### 第三部分：給您的產出建議邏輯";
+  const startIndex = docText.indexOf(startMarker);
+  const endIndex = docText.indexOf(endMarker);
+
+  if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
+    return `${docText}\n\n${secondPartBlock}`;
+  }
+
+  const before = docText.substring(0, startIndex).trimEnd();
+  const after = docText.substring(endIndex).trimStart();
+  return `${before}\n\n${secondPartBlock}\n\n${after}`;
+}
+
+function callGeminiText_(promptText) {
+  const API_KEY = "YOUR_API_KEY";
+  if (!API_KEY || API_KEY === "YOUR_API_KEY") {
+    throw new Error("請先在 code.gs 內填入 Gemini API Key。");
+  }
+
+  const endpoint =
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=" +
+    encodeURIComponent(API_KEY);
+  const reqBody = {
+    contents: [
+      {
+        parts: [{ text: promptText }],
+      },
+    ],
+    generationConfig: {
+      temperature: 0.6,
+    },
+  };
+
+  const response = UrlFetchApp.fetch(endpoint, {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(reqBody),
+    muteHttpExceptions: true,
+  });
+  const status = response.getResponseCode();
+  const rawText = response.getContentText();
+
+  if (status < 200 || status >= 300) {
+    throw new Error("Gemini API 錯誤: HTTP " + status + " - " + rawText);
+  }
+
+  const data = JSON.parse(rawText);
+  const candidate =
+    data && data.candidates && data.candidates.length > 0 && data.candidates[0];
+  const parts =
+    candidate &&
+    candidate.content &&
+    candidate.content.parts &&
+    candidate.content.parts.length > 0
+      ? candidate.content.parts
+      : [];
+  const text = parts
+    .map((p) => (p && p.text ? p.text : ""))
+    .join("\n")
+    .trim();
+
+  if (!text) {
+    throw new Error("Gemini 未回傳有效文字內容。");
+  }
+  return text;
+}
+
+function buildReportPdfBlob_(payload) {
+  const nowText = Utilities.formatDate(
+    new Date(),
+    Session.getScriptTimeZone(),
+    "yyyy-MM-dd HH:mm:ss",
+  );
+  const safeName = payload.name || "學員";
+  const safeVersion = payload.versionTitle || payload.versionId || "v1";
+  const reportTextEscaped = escapeHtml_(payload.reportText || "");
+
+  const html = `
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      body { font-family: Arial, "Microsoft JhengHei", sans-serif; padding: 24px; color: #1f2937; line-height: 1.8; }
+      h1 { font-size: 20px; margin: 0 0 12px 0; }
+      .meta { color: #64748b; font-size: 12px; margin-bottom: 20px; }
+      .content { white-space: pre-wrap; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <h1>節奏工作法個人化解析報告</h1>
+    <div class="meta">學員：${escapeHtml_(safeName)} ｜ 版本：${escapeHtml_(safeVersion)} ｜ 產生時間：${escapeHtml_(nowText)}</div>
+    <div class="content">${reportTextEscaped}</div>
+  </body>
+</html>
+`;
+
+  const pdfBlob = HtmlService.createHtmlOutput(html)
+    .getBlob()
+    .getAs(MimeType.PDF)
+    .setName(
+      "節奏工作法報告_" +
+        Utilities.formatDate(
+          new Date(),
+          Session.getScriptTimeZone(),
+          "yyyyMMdd_HHmmss",
+        ) +
+        ".pdf",
+    );
+  return pdfBlob;
+}
+
+function getOrCreateSubFolder_(parentFolder, name) {
+  const iter = parentFolder.getFoldersByName(name);
+  if (iter.hasNext()) return iter.next();
+  return parentFolder.createFolder(name);
+}
+
+function saveReportRecord_(payload) {
+  const root = getRootFolder();
+  const files = root.getFilesByName("問卷報告紀錄");
+  let ss;
+  if (files.hasNext()) {
+    ss = SpreadsheetApp.open(files.next());
+  } else {
+    ss = SpreadsheetApp.create("問卷報告紀錄");
+    const ssFile = DriveApp.getFileById(ss.getId());
+    root.addFile(ssFile);
+    DriveApp.getRootFolder().removeFile(ssFile);
+  }
+
+  const today = Utilities.formatDate(
+    new Date(),
+    Session.getScriptTimeZone(),
+    "yyyy-MM-dd",
+  );
+  let sheet = ss.getSheetByName(today);
+  if (!sheet) {
+    sheet = ss.insertSheet(today);
+    sheet.appendRow([
+      "時間",
+      "作答者姓名",
+      "作答者電子郵件",
+      "版本編號",
+      "版本標題",
+      "PDF檔案ID",
+      "PDF檔案網址",
+      "答案(JSON)",
+      "AI回傳文字",
+    ]);
+    sheet.setFrozenRows(1);
+  }
+
+  sheet.appendRow([
+    new Date(),
+    payload.name || "",
+    payload.email || "",
+    payload.versionId || "",
+    payload.versionTitle || "",
+    payload.pdfFileId || "",
+    payload.pdfFileUrl || "",
+    JSON.stringify(payload.answers || []),
+    payload.reportText || "",
+  ]);
+}
+
+function escapeHtml_(text) {
+  return String(text || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}

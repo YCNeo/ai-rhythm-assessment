@@ -24,6 +24,15 @@
     submitBtn: document.getElementById("submit-btn"),
     errorBox: document.getElementById("error-box"),
     successBox: document.getElementById("success-box"),
+    reportModal: document.getElementById("report-modal"),
+    reportContent: document.getElementById("report-content"),
+    btnCloseModal: document.getElementById("btn-close-modal"),
+    btnSendPdf: document.getElementById("btn-send-pdf"),
+  };
+
+  const uiState = {
+    latestSubmission: null,
+    latestReportText: "",
   };
 
   function escapeHtml(text) {
@@ -201,6 +210,17 @@
     el.successBox.classList.remove("hidden");
   }
 
+  function openReportModal(reportText) {
+    el.reportContent.textContent = reportText || "";
+    el.reportModal.classList.remove("hidden");
+    document.body.classList.add("overflow-hidden");
+  }
+
+  function closeReportModal() {
+    el.reportModal.classList.add("hidden");
+    document.body.classList.remove("overflow-hidden");
+  }
+
   function collectAnswers() {
     const questions = questionnaire.questions || [];
     const answers = [];
@@ -261,9 +281,10 @@
         email: email,
         answers: answers,
       };
+      uiState.latestSubmission = payload;
 
       el.submitBtn.disabled = true;
-      el.submitBtn.textContent = "送出中...";
+      el.submitBtn.textContent = "分析中...";
 
       if (!(window.google && google.script && google.script.run)) {
         throw new Error("目前不在 Apps Script 環境，無法送出。");
@@ -274,10 +295,18 @@
           el.submitBtn.disabled = false;
           el.submitBtn.textContent = "送出問卷";
 
-          if (result === "OK") {
-            showSuccess("送出成功，感謝填答。");
-          } else {
-            showError(`送出失敗：${result}`);
+          const reportText = (result && result.reportText) || "";
+          if (!reportText) {
+            showError("AI 回傳內容為空，請稍後再試。");
+            return;
+          }
+
+          uiState.latestReportText = reportText;
+          openReportModal(reportText);
+          showSuccess("問卷已完成分析，請確認報告後寄送 PDF。");
+
+          if (window.google && google.script && google.script.run) {
+            google.script.run.saveQuestionnaireResponse(payload);
           }
         })
         .withFailureHandler((err) => {
@@ -285,10 +314,52 @@
           el.submitBtn.textContent = "送出問卷";
           showError(`送出失敗：${err.message || err}`);
         })
-        .saveQuestionnaireResponse(payload);
+        .generateAiReport({
+          versionId: payload.versionId,
+          versionTitle: payload.versionTitle,
+          answers: payload.answers,
+        });
     } catch (err) {
       showError(err.message || "送出失敗，請稍後再試。");
     }
+  }
+
+  function sendPdfToEmail() {
+    clearMessage();
+    const base = uiState.latestSubmission;
+    const reportText = uiState.latestReportText;
+
+    if (!base || !reportText) {
+      showError("找不到可寄送的報告內容，請先送出問卷並完成分析。");
+      return;
+    }
+
+    el.btnSendPdf.disabled = true;
+    el.btnSendPdf.textContent = "寄送中...";
+
+    google.script.run
+      .withSuccessHandler((result) => {
+        el.btnSendPdf.disabled = false;
+        el.btnSendPdf.textContent = "轉成 PDF 並寄到信箱";
+        if (result && result.status === "OK") {
+          showSuccess("PDF 已寄到你的信箱，並已記錄到試算表。");
+        } else {
+          showError(`寄送失敗：${(result && result.message) || "未知錯誤"}`);
+        }
+      })
+      .withFailureHandler((err) => {
+        el.btnSendPdf.disabled = false;
+        el.btnSendPdf.textContent = "轉成 PDF 並寄到信箱";
+        showError(`寄送失敗：${err.message || err}`);
+      })
+      .sendReportPdf({
+        name: base.name,
+        email: base.email,
+        versionId: base.versionId,
+        versionTitle: base.versionTitle,
+        answers: base.answers,
+        reportText: reportText,
+      });
   }
 
   function loadQuestionnaireFromServerIfNeeded() {
@@ -331,5 +402,12 @@
   }
 
   el.submitBtn.addEventListener("click", submit);
+  el.btnSendPdf.addEventListener("click", sendPdfToEmail);
+  el.btnCloseModal.addEventListener("click", closeReportModal);
+  el.reportModal.addEventListener("click", (event) => {
+    if (event.target === el.reportModal) {
+      closeReportModal();
+    }
+  });
   loadQuestionnaireFromServerIfNeeded();
 </script>
