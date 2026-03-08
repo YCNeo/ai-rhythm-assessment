@@ -341,7 +341,7 @@ function sendReportPdf(payload) {
       subject: "你的節奏工作法個人化解析報告",
       body: "您好，附件為本次問卷的節奏工作法 AI 個人化解析報告（PDF）。",
       htmlBody:
-        "<p>您好，附件為本次問卷的節奏工作法 <b>AI 個人化解析報告</b>（PDF）。</p>" +
+        "<p>您好，附件為本次問卷的<b>節奏工作法 AI 個人化解析報告</b>（PDF）。</p>" +
         "<p>若未看到附件，請向講師詢問索取。</p>",
       attachments: [pdfBlob],
     };
