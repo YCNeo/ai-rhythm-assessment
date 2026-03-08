@@ -239,6 +239,11 @@ function sendReportPdf(payload) {
       return { status: "ERROR", message: "缺少 AI 報告內容，無法產生 PDF。" };
     }
 
+    const remainingQuota = MailApp.getRemainingDailyQuota();
+    if (remainingQuota <= 0) {
+      return { status: "ERROR", message: "今日寄信額度已用盡，請明天再試。" };
+    }
+
     const pdfBlob = buildReportPdfBlob_({
       name: name,
       versionId: versionId,
@@ -250,12 +255,18 @@ function sendReportPdf(payload) {
     const pdfFolder = getOrCreateSubFolder_(root, "問卷報告PDF");
     const pdfFile = pdfFolder.createFile(pdfBlob);
 
-    MailApp.sendEmail({
+    const ownerEmail = "";
+    const mailOptions = {
       to: email,
       subject: "你的節奏工作法個人化解析報告",
       body: "您好，附件為本次問卷的 AI 個人化解析報告（PDF）。",
+      htmlBody:
+        "<p>您好，附件為本次問卷的 <b>AI 個人化解析報告</b>（PDF）。</p>" +
+        "<p>若未看到附件，請先檢查垃圾郵件匣。</p>",
       attachments: [pdfBlob],
-    });
+    };
+    MailApp.sendEmail(mailOptions);
+    const quotaAfter = MailApp.getRemainingDailyQuota();
 
     saveReportRecord_({
       name: name,
@@ -266,13 +277,22 @@ function sendReportPdf(payload) {
       reportText: reportText,
       pdfFileId: pdfFile.getId(),
       pdfFileUrl: pdfFile.getUrl(),
+      emailSentTo: email,
+      emailBcc: ownerEmail || "",
+      mailQuotaBefore: remainingQuota,
+      mailQuotaAfter: quotaAfter,
     });
 
     return {
       status: "OK",
-      message: "PDF 已寄送",
+      message: "PDF 已寄送，若未收到請檢查垃圾郵件匣。",
       pdfFileId: pdfFile.getId(),
       pdfFileUrl: pdfFile.getUrl(),
+      sentTo: email,
+      bcc: "",
+      mailQuotaBefore: remainingQuota,
+      mailQuotaAfter: quotaAfter,
+      deployerEmail: "",
     };
   } catch (e) {
     return { status: "ERROR", message: e.toString() };
@@ -371,52 +391,138 @@ function callGeminiText_(promptText) {
     throw new Error("請先在 code.gs 內填入 Gemini API Key。");
   }
 
-  const endpoint =
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=" +
-    encodeURIComponent(API_KEY);
-  const reqBody = {
-    contents: [
-      {
-        parts: [{ text: promptText }],
+  const modelCandidates = getPreferredModelCandidates_(API_KEY);
+  let lastErrorMessage = "";
+
+  const retryableStatuses = { 429: true, 500: true, 502: true, 503: true };
+  const maxAttemptsPerModel = 3;
+  const backoffMs = [3000, 8000, 15000];
+
+  for (let i = 0; i < modelCandidates.length; i++) {
+    const model = modelCandidates[i];
+    const endpoint =
+      "https://generativelanguage.googleapis.com/v1beta/models/" +
+      model +
+      ":generateContent?key=" +
+      encodeURIComponent(API_KEY);
+    const reqBody = {
+      contents: [
+        {
+          parts: [{ text: promptText }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.6,
       },
-    ],
-    generationConfig: {
-      temperature: 0.6,
-    },
-  };
+    };
 
-  const response = UrlFetchApp.fetch(endpoint, {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify(reqBody),
-    muteHttpExceptions: true,
-  });
-  const status = response.getResponseCode();
-  const rawText = response.getContentText();
+    for (let attempt = 1; attempt <= maxAttemptsPerModel; attempt++) {
+      const response = UrlFetchApp.fetch(endpoint, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify(reqBody),
+        muteHttpExceptions: true,
+      });
+      const status = response.getResponseCode();
+      const rawText = response.getContentText();
 
-  if (status < 200 || status >= 300) {
-    throw new Error("Gemini API 錯誤: HTTP " + status + " - " + rawText);
+      if (status >= 200 && status < 300) {
+        const data = JSON.parse(rawText);
+        const candidate =
+          data &&
+          data.candidates &&
+          data.candidates.length > 0 &&
+          data.candidates[0];
+        const parts =
+          candidate &&
+          candidate.content &&
+          candidate.content.parts &&
+          candidate.content.parts.length > 0
+            ? candidate.content.parts
+            : [];
+        const text = parts
+          .map((p) => (p && p.text ? p.text : ""))
+          .join("\n")
+          .trim();
+
+        if (text) {
+          return text;
+        }
+        lastErrorMessage = "模型 " + model + " 未回傳有效文字。";
+        break;
+      }
+
+      lastErrorMessage = "模型 " + model + " 回應 HTTP " + status + "。";
+
+      if (status === 404) {
+        // 模型不存在，直接換下一個模型
+        break;
+      }
+
+      if (retryableStatuses[status] && attempt < maxAttemptsPerModel) {
+        Utilities.sleep(backoffMs[attempt - 1] || 15000);
+        continue;
+      }
+
+      if (retryableStatuses[status]) {
+        // 此模型重試後仍失敗，換下一個模型
+        break;
+      }
+
+      throw new Error("Gemini API 錯誤: HTTP " + status + " - " + rawText);
+    }
   }
 
-  const data = JSON.parse(rawText);
-  const candidate =
-    data && data.candidates && data.candidates.length > 0 && data.candidates[0];
-  const parts =
-    candidate &&
-    candidate.content &&
-    candidate.content.parts &&
-    candidate.content.parts.length > 0
-      ? candidate.content.parts
-      : [];
-  const text = parts
-    .map((p) => (p && p.text ? p.text : ""))
-    .join("\n")
-    .trim();
+  throw new Error("目前可嘗試的模型皆不可用。最後錯誤：" + lastErrorMessage);
+}
 
-  if (!text) {
-    throw new Error("Gemini 未回傳有效文字內容。");
+function getPreferredModelCandidates_(apiKey) {
+  const preferredOrder = ["gemini-3-flash", "gemini-2.5-flash"];
+
+  try {
+    const endpoint =
+      "https://generativelanguage.googleapis.com/v1beta/models?key=" +
+      encodeURIComponent(apiKey);
+    const response = UrlFetchApp.fetch(endpoint, {
+      method: "get",
+      muteHttpExceptions: true,
+    });
+    const status = response.getResponseCode();
+    if (status < 200 || status >= 300) {
+      return preferredOrder;
+    }
+
+    const data = JSON.parse(response.getContentText() || "{}");
+    const models = data.models || [];
+    const available = {};
+
+    models.forEach((m) => {
+      const name = (m && m.name ? String(m.name) : "").replace("models/", "");
+      const methods =
+        m && m.supportedGenerationMethods ? m.supportedGenerationMethods : [];
+      if (name && methods.indexOf("generateContent") !== -1) {
+        available[name] = true;
+      }
+    });
+
+    // 只允許你指定的兩類：Gemini 3 Flash、Gemini 2.5 Flash
+    const availableNames = Object.keys(available);
+    const gemini3Flash = availableNames.filter(
+      (n) => /^gemini-3(\.|-).*flash/.test(n) || n === "gemini-3-flash",
+    );
+    const gemini25Flash = availableNames.filter(
+      (n) => /^gemini-2\.5.*flash/.test(n) || n === "gemini-2.5-flash",
+    );
+
+    const ordered = []
+      .concat(gemini3Flash.sort())
+      .concat(gemini25Flash.sort())
+      .filter((v, i, arr) => arr.indexOf(v) === i);
+
+    return ordered.length ? ordered : preferredOrder;
+  } catch (e) {
+    return preferredOrder;
   }
-  return text;
 }
 
 function buildReportPdfBlob_(payload) {
@@ -499,6 +605,10 @@ function saveReportRecord_(payload) {
       "版本標題",
       "PDF檔案ID",
       "PDF檔案網址",
+      "寄送收件者",
+      "寄送副本(BCC)",
+      "寄送前剩餘配額",
+      "寄送後剩餘配額",
       "答案(JSON)",
       "AI回傳文字",
     ]);
@@ -513,9 +623,35 @@ function saveReportRecord_(payload) {
     payload.versionTitle || "",
     payload.pdfFileId || "",
     payload.pdfFileUrl || "",
+    payload.emailSentTo || "",
+    payload.emailBcc || "",
+    payload.mailQuotaBefore || "",
+    payload.mailQuotaAfter || "",
     JSON.stringify(payload.answers || []),
     payload.reportText || "",
   ]);
+}
+
+/**
+ * 檢查寄信授權與配額（手動執行或前端調用）
+ */
+function checkMailCapability() {
+  try {
+    const quota = MailApp.getRemainingDailyQuota();
+    return {
+      status: "OK",
+      quota: quota,
+      deployerEmail: "",
+      message: "寄信權限可用",
+    };
+  } catch (e) {
+    return {
+      status: "ERROR",
+      quota: -1,
+      deployerEmail: "",
+      message: e.toString(),
+    };
+  }
 }
 
 function escapeHtml_(text) {
@@ -525,4 +661,18 @@ function escapeHtml_(text) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/**
+ * 手動觸發授權用：請在 GAS 編輯器直接執行一次
+ */
+function authorizeRequiredScopes() {
+  UrlFetchApp.fetch("https://www.googleapis.com/discovery/v1/apis", {
+    method: "get",
+    muteHttpExceptions: true,
+  });
+  MailApp.getRemainingDailyQuota();
+  DriveApp.getRootFolder().getName();
+  SpreadsheetApp.create("權限初始化測試_" + new Date().getTime()).getId();
+  return "OK";
 }

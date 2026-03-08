@@ -26,6 +26,7 @@
     successBox: document.getElementById("success-box"),
     reportModal: document.getElementById("report-modal"),
     reportContent: document.getElementById("report-content"),
+    reportSendStatus: document.getElementById("report-send-status"),
     btnCloseModal: document.getElementById("btn-close-modal"),
     btnSendPdf: document.getElementById("btn-send-pdf"),
   };
@@ -211,14 +212,139 @@
   }
 
   function openReportModal(reportText) {
-    el.reportContent.textContent = reportText || "";
+    el.reportContent.innerHTML = markdownToHtml(reportText || "");
+    if (el.reportSendStatus) {
+      el.reportSendStatus.textContent = "";
+      el.reportSendStatus.className =
+        "w-full md:flex-1 text-xs text-slate-500 leading-6";
+    }
     el.reportModal.classList.remove("hidden");
     document.body.classList.add("overflow-hidden");
+
+    if (window.google && google.script && google.script.run) {
+      google.script.run
+        .withSuccessHandler((result) => {
+          if (!result || result.status !== "OK") {
+            setReportSendStatus(
+              `寄信檢查失敗：${(result && result.message) || "未知錯誤"}`,
+              "error",
+            );
+            return;
+          }
+          setReportSendStatus(
+            `寄信檢查通過，可寄送。今日剩餘配額：${result.quota}`,
+            "info",
+          );
+        })
+        .withFailureHandler((err) => {
+          setReportSendStatus(`寄信檢查失敗：${err.message || err}`, "error");
+        })
+        .checkMailCapability();
+    }
   }
 
   function closeReportModal() {
     el.reportModal.classList.add("hidden");
     document.body.classList.remove("overflow-hidden");
+  }
+
+  function setReportSendStatus(message, tone) {
+    if (!el.reportSendStatus) return;
+    const toneClass =
+      tone === "error"
+        ? "text-red-600"
+        : tone === "success"
+          ? "text-emerald-700"
+          : "text-slate-500";
+    el.reportSendStatus.className = `w-full md:flex-1 text-xs leading-6 ${toneClass}`;
+    el.reportSendStatus.textContent = message || "";
+  }
+
+  function formatInlineMarkdown(text) {
+    const escaped = escapeHtml(text || "");
+    return escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  }
+
+  function markdownToHtml(markdownText) {
+    const lines = String(markdownText || "")
+      .replace(/\r\n/g, "\n")
+      .split("\n");
+    const html = [];
+    let inUl = false;
+    let inOl = false;
+
+    const closeLists = () => {
+      if (inUl) {
+        html.push("</ul>");
+        inUl = false;
+      }
+      if (inOl) {
+        html.push("</ol>");
+        inOl = false;
+      }
+    };
+
+    lines.forEach((lineRaw) => {
+      const line = lineRaw.trim();
+      if (!line) {
+        closeLists();
+        return;
+      }
+
+      let matched;
+      if ((matched = line.match(/^####\s+(.+)/))) {
+        closeLists();
+        html.push(`<h4>${formatInlineMarkdown(matched[1])}</h4>`);
+        return;
+      }
+      if ((matched = line.match(/^###\s+(.+)/))) {
+        closeLists();
+        html.push(`<h3>${formatInlineMarkdown(matched[1])}</h3>`);
+        return;
+      }
+      if ((matched = line.match(/^##\s+(.+)/))) {
+        closeLists();
+        html.push(`<h2>${formatInlineMarkdown(matched[1])}</h2>`);
+        return;
+      }
+      if ((matched = line.match(/^#\s+(.+)/))) {
+        closeLists();
+        html.push(`<h1>${formatInlineMarkdown(matched[1])}</h1>`);
+        return;
+      }
+
+      if ((matched = line.match(/^\d+\.\s+(.+)/))) {
+        if (inUl) {
+          html.push("</ul>");
+          inUl = false;
+        }
+        if (!inOl) {
+          html.push("<ol>");
+          inOl = true;
+        }
+        html.push(`<li>${formatInlineMarkdown(matched[1])}</li>`);
+        return;
+      }
+
+      if ((matched = line.match(/^-+\s+(.+)/))) {
+        if (inOl) {
+          html.push("</ol>");
+          inOl = false;
+        }
+        if (!inUl) {
+          html.push("<ul>");
+          inUl = true;
+        }
+        html.push(`<li>${formatInlineMarkdown(matched[1])}</li>`);
+        return;
+      }
+
+      closeLists();
+      html.push(`<p>${formatInlineMarkdown(line)}</p>`);
+    });
+
+    closeLists();
+    return html.join("");
   }
 
   function collectAnswers() {
@@ -331,11 +457,13 @@
 
     if (!base || !reportText) {
       showError("找不到可寄送的報告內容，請先送出問卷並完成分析。");
+      setReportSendStatus("找不到可寄送的報告內容。", "error");
       return;
     }
 
     el.btnSendPdf.disabled = true;
     el.btnSendPdf.textContent = "寄送中...";
+    setReportSendStatus("正在確認授權與寄信配額，請稍候...", "info");
 
     google.script.run
       .withSuccessHandler((result) => {
@@ -343,14 +471,22 @@
         el.btnSendPdf.textContent = "轉成 PDF 並寄到信箱";
         if (result && result.status === "OK") {
           showSuccess("PDF 已寄到你的信箱，並已記錄到試算表。");
+          setReportSendStatus(
+            `寄送成功：收件者 ${result.sentTo || base.email}，副本 ${result.bcc || "無"}。`,
+            "success",
+          );
         } else {
-          showError(`寄送失敗：${(result && result.message) || "未知錯誤"}`);
+          const msg = `寄送失敗：${(result && result.message) || "未知錯誤"}`;
+          showError(msg);
+          setReportSendStatus(msg, "error");
         }
       })
       .withFailureHandler((err) => {
         el.btnSendPdf.disabled = false;
         el.btnSendPdf.textContent = "轉成 PDF 並寄到信箱";
-        showError(`寄送失敗：${err.message || err}`);
+        const msg = `寄送失敗：${err.message || err}`;
+        showError(msg);
+        setReportSendStatus(msg, "error");
       })
       .sendReportPdf({
         name: base.name,
