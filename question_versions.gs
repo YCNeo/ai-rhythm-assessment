@@ -57,7 +57,7 @@ const VERSION_QUESTIONNAIRES = {
     versionQuestions: [
       {
         id: "q1",
-        section: "第二部分：個人化節奏診斷（維度一：生理與能量節奏）",
+        section: "維度一：生理與能量節奏",
         type: "single",
         title: "Q1：您在什麼時段感覺腦袋最清醒、處理複雜邏輯最有效率？",
         required: true,
@@ -69,7 +69,7 @@ const VERSION_QUESTIONNAIRES = {
       },
       {
         id: "q2",
-        section: "第二部分：個人化節奏診斷（維度一：生理與能量節奏）",
+        section: "維度一：生理與能量節奏",
         type: "scale",
         title: "Q2：您是否常在下午 14:00-16:00 感到極度疲勞或專注力渙散？",
         required: true,
@@ -80,7 +80,7 @@ const VERSION_QUESTIONNAIRES = {
       },
       {
         id: "q3",
-        section: "第二部分：個人化節奏診斷（維度一：生理與能量節奏）",
+        section: "維度一：生理與能量節奏",
         type: "single",
         title: "Q3：您通常如何處理低能量時段（疲累時）的工作？",
         required: true,
@@ -88,7 +88,7 @@ const VERSION_QUESTIONNAIRES = {
       },
       {
         id: "q4",
-        section: "第二部分：個人化節奏診斷（維度二：任務邊界與拍點設計）",
+        section: "維度二：任務邊界與拍點設計",
         type: "scale",
         title:
           "Q4：接到新任務時，您是否能清楚定義「做到什麼程度算完成（證據）」？",
@@ -100,7 +100,7 @@ const VERSION_QUESTIONNAIRES = {
       },
       {
         id: "q5",
-        section: "第二部分：個人化節奏診斷（維度二：任務邊界與拍點設計）",
+        section: "維度二：任務邊界與拍點設計",
         type: "scale",
         title: "Q5：您是否會在行事曆上預留「深度工作拍（深度專注區塊）」？",
         required: true,
@@ -111,7 +111,7 @@ const VERSION_QUESTIONNAIRES = {
       },
       {
         id: "q6",
-        section: "第二部分：個人化節奏診斷（維度二：任務邊界與拍點設計）",
+        section: "維度二：任務邊界與拍點設計",
         type: "single",
         title: "Q6：一天中有多少比例時間在處理他人的突發需求（插單）？",
         required: true,
@@ -119,7 +119,7 @@ const VERSION_QUESTIONNAIRES = {
       },
       {
         id: "q7",
-        section: "第二部分：個人化節奏診斷（維度三：決策與插單處理）",
+        section: "維度三：決策與插單處理",
         type: "single",
         title:
           "Q7：面對臨時插入的瑣碎任務（如一封不急的郵件），您最常採取的行動是？",
@@ -128,7 +128,7 @@ const VERSION_QUESTIONNAIRES = {
       },
       {
         id: "q8",
-        section: "第二部分：個人化節奏診斷（維度三：決策與插單處理）",
+        section: "維度三：決策與插單處理",
         type: "scale",
         title: "Q8：您是否常覺得全天都在處理零碎任務，導致大專案沒有進展？",
         required: true,
@@ -139,7 +139,7 @@ const VERSION_QUESTIONNAIRES = {
       },
       {
         id: "q9",
-        section: "第二部分：個人化節奏診斷（維度四：溝通與同步效率）",
+        section: "維度四：溝通與同步效率",
         type: "scale",
         title: "Q9：當您請求他人幫忙時，是否常發生「成果與您的預期不符」？",
         required: true,
@@ -150,7 +150,7 @@ const VERSION_QUESTIONNAIRES = {
       },
       {
         id: "q10",
-        section: "第二部分：個人化節奏診斷（維度四：溝通與同步效率）",
+        section: "維度四：溝通與同步效率",
         type: "scale",
         title:
           "Q10：與主管或團隊對齊進度、爭取資源時，您能控制在 90 秒內講完重點嗎？",
@@ -162,7 +162,7 @@ const VERSION_QUESTIONNAIRES = {
       },
       {
         id: "q11",
-        section: "第二部分：個人化節奏診斷（維度四：溝通與同步效率）",
+        section: "維度四：溝通與同步效率",
         type: "scale",
         title:
           "Q11：您是否會主動公告自己的「對外回應拍點」（例如固定回覆時段）？",
@@ -174,7 +174,7 @@ const VERSION_QUESTIONNAIRES = {
       },
       {
         id: "q12",
-        section: "第二部分：個人化節奏診斷（維度五：底層信念與自我校準）",
+        section: "維度五：底層信念與自我校準",
         type: "scale",
         title: "Q12：下班前，您是否會有意識地回看今天的「節奏證據」？",
         required: true,
@@ -185,7 +185,7 @@ const VERSION_QUESTIONNAIRES = {
       },
       {
         id: "q13",
-        section: "第二部分：個人化節奏診斷（維度五：底層信念與自我校準）",
+        section: "維度五：底層信念與自我校準",
         type: "scale",
         title: "Q13：目前工作量是否讓您感到「越努力越疲憊、缺乏成就感」？",
         required: true,

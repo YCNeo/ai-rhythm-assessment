@@ -63,15 +63,25 @@
     }
 
     let currentSection = "";
+    let secondPartShown = false;
     el.questionContainer.innerHTML = questions
       .map((q, index) => {
         const requiredMark = q.required
           ? '<span class="text-red-500">*</span>'
           : "";
         const title = `<p class="font-bold text-base">${index + 1}. ${escapeHtml(q.title)} ${requiredMark}</p>`;
+        const isSecondPartSection =
+          typeof q.section === "string" && q.section.indexOf("維度") === 0;
+        const secondPartHtml =
+          isSecondPartSection && !secondPartShown
+            ? '<h3 class="text-sm font-black text-slate-800 border-b border-slate-200 pb-2 mt-4">第二部分：個人化節奏診斷</h3>'
+            : "";
+        if (isSecondPartSection && !secondPartShown) {
+          secondPartShown = true;
+        }
         const sectionHtml =
           q.section && q.section !== currentSection
-            ? `<h3 class="text-sm font-black text-indigo-700 border-b border-indigo-100 pb-2 mt-2">${escapeHtml(q.section)}</h3>`
+            ? `<h4 class="text-sm font-black text-indigo-700 border-b border-indigo-100 pb-2 mt-2">${escapeHtml(q.section)}</h4>`
             : "";
         currentSection = q.section || currentSection;
 
@@ -90,6 +100,7 @@
 
           return `
             <div class="space-y-2">
+              ${secondPartHtml}
               ${sectionHtml}
               ${title}
               <div class="space-y-2">${options}</div>
@@ -120,6 +131,7 @@
 
           return `
             <div class="space-y-2">
+              ${secondPartHtml}
               ${sectionHtml}
               ${title}
               <div class="rounded-xl border border-slate-200 p-3 bg-slate-50">
@@ -137,6 +149,7 @@
         const placeholder = escapeHtml(q.placeholder || "請輸入答案");
         return `
           <div class="space-y-2">
+            ${secondPartHtml}
             ${sectionHtml}
             ${title}
             <textarea
