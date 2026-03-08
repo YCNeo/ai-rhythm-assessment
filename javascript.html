@@ -17,6 +17,7 @@
     versionBadge: document.getElementById("version-badge"),
     surveyTitle: document.getElementById("survey-title"),
     surveyDesc: document.getElementById("survey-desc"),
+    frontQuestionContainer: document.getElementById("front-question-container"),
     questionContainer: document.getElementById("question-container"),
     respondentName: document.getElementById("respondent-name"),
     respondentEmail: document.getElementById("respondent-email"),
@@ -57,110 +58,130 @@
   function renderQuestions() {
     const questions = questionnaire.questions || [];
     if (!questions.length) {
+      if (el.frontQuestionContainer) {
+        el.frontQuestionContainer.innerHTML = "";
+      }
       el.questionContainer.innerHTML =
         '<p class="text-sm text-slate-500 leading-7">目前此版本沒有題目。</p>';
       return;
     }
+    const isBackgroundQuestion = (question) =>
+      !!question.section && question.section.indexOf("第一部分") === 0;
 
-    let currentSection = "";
-    let secondPartShown = false;
-    el.questionContainer.innerHTML = questions
-      .map((q, index) => {
-        const requiredMark = q.required
-          ? '<span class="text-red-500">*</span>'
-          : "";
-        const title = `<p class="font-bold text-base">${index + 1}. ${escapeHtml(q.title)} ${requiredMark}</p>`;
-        const isSecondPartSection =
-          typeof q.section === "string" && q.section.indexOf("維度") === 0;
-        const secondPartHtml =
-          isSecondPartSection && !secondPartShown
-            ? '<h3 class="text-sm font-black text-slate-800 border-b border-slate-200 pb-2 mt-4">第二部分：個人化節奏診斷</h3>'
-            : "";
-        if (isSecondPartSection && !secondPartShown) {
-          secondPartShown = true;
-        }
-        const sectionHtml =
-          q.section && q.section !== currentSection
-            ? `<h4 class="text-base font-black text-indigo-700 border-b border-indigo-100 pb-3 mt-3">${escapeHtml(q.section)}</h4>`
-            : "";
-        currentSection = q.section || currentSection;
+    const renderQuestionCard = (q, index) => {
+      const requiredMark = q.required
+        ? '<span class="text-red-500">*</span>'
+        : "";
+      const title = `<p class="font-bold text-base">${index + 1}. ${escapeHtml(q.title)} ${requiredMark}</p>`;
 
-        if (q.type === "single") {
-          const domKey = toDomKey(q.id);
-          const options = (q.options || [])
-            .map(
-              (opt) => `
-              <label class="flex items-start gap-3 text-sm leading-6 text-slate-700 rounded-xl px-2 py-1 hover:bg-slate-50">
-                <input type="radio" name="${domKey}" value="${escapeHtml(opt)}" class="accent-indigo-600" />
-                <span>${escapeHtml(opt)}</span>
-              </label>
-            `,
-            )
-            .join("");
-
-          return `
-            <article class="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
-              ${secondPartHtml}
-              ${sectionHtml}
-              ${title}
-              <div class="space-y-3">${options}</div>
-            </article>
-          `;
-        }
-
-        if (q.type === "scale") {
-          const domKey = toDomKey(q.id);
-          const min = Number.isFinite(q.min) ? q.min : 1;
-          const max = Number.isFinite(q.max) ? q.max : 5;
-          const points = [];
-          for (let i = min; i <= max; i += 1) {
-            points.push(i);
-          }
-          const options = points
-            .map(
-              (point) => `
-              <label class="flex flex-col items-center gap-1 text-sm text-slate-700 px-1">
-                <input type="radio" name="${domKey}" value="${point}" class="accent-indigo-600 w-4 h-4" />
-                <span class="font-semibold">${point}</span>
-              </label>
-            `,
-            )
-            .join("");
-          const minLabel = escapeHtml(q.minLabel || "");
-          const maxLabel = escapeHtml(q.maxLabel || "");
-
-          return `
-            <article class="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
-              ${secondPartHtml}
-              ${sectionHtml}
-              ${title}
-              <div class="rounded-2xl border border-slate-200 p-4 bg-slate-50">
-                <div class="flex justify-between text-xs font-medium text-slate-500 mb-3">
-                  <span>${minLabel}</span>
-                  <span>${maxLabel}</span>
-                </div>
-                <div class="flex items-center justify-between gap-2">${options}</div>
-              </div>
-            </article>
-          `;
-        }
-
+      if (q.type === "single") {
         const domKey = toDomKey(q.id);
-        const placeholder = escapeHtml(q.placeholder || "請輸入答案");
+        const options = (q.options || [])
+          .map(
+            (opt) => `
+            <label class="flex items-start gap-3 text-sm leading-6 text-slate-700 rounded-xl px-2 py-1 hover:bg-slate-50">
+              <input type="radio" name="${domKey}" value="${escapeHtml(opt)}" class="accent-indigo-600" />
+              <span>${escapeHtml(opt)}</span>
+            </label>
+          `,
+          )
+          .join("");
+
         return `
           <article class="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
-            ${secondPartHtml}
-            ${sectionHtml}
             ${title}
-            <textarea
-              id="${domKey}"
-              class="w-full rounded-2xl border border-slate-200 px-4 py-3 bg-slate-50 min-h-32 leading-7 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition"
-              placeholder="${placeholder}"
-            ></textarea>
+            <div class="space-y-3">${options}</div>
           </article>
+        `;
+      }
+
+      if (q.type === "scale") {
+        const domKey = toDomKey(q.id);
+        const min = Number.isFinite(q.min) ? q.min : 1;
+        const max = Number.isFinite(q.max) ? q.max : 5;
+        const points = [];
+        for (let i = min; i <= max; i += 1) points.push(i);
+        const options = points
+          .map(
+            (point) => `
+            <label class="flex flex-col items-center gap-1 text-sm text-slate-700 px-1">
+              <input type="radio" name="${domKey}" value="${point}" class="accent-indigo-600 w-4 h-4" />
+              <span class="font-semibold">${point}</span>
+            </label>
+          `,
+          )
+          .join("");
+        const minLabel = escapeHtml(q.minLabel || "");
+        const maxLabel = escapeHtml(q.maxLabel || "");
+
+        return `
+          <article class="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
+            ${title}
+            <div class="rounded-2xl border border-slate-200 p-4 bg-slate-50">
+              <div class="flex justify-between text-xs font-medium text-slate-500 mb-3">
+                <span>${minLabel}</span>
+                <span>${maxLabel}</span>
+              </div>
+              <div class="flex items-center justify-between gap-2">${options}</div>
+            </div>
+          </article>
+        `;
+      }
+
+      const domKey = toDomKey(q.id);
+      const placeholder = escapeHtml(q.placeholder || "請輸入答案");
+      return `
+        <article class="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
+          ${title}
+          <textarea
+            id="${domKey}"
+            class="w-full rounded-2xl border border-slate-200 px-4 py-3 bg-slate-50 min-h-32 leading-7 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition"
+            placeholder="${placeholder}"
+          ></textarea>
+        </article>
+      `;
+    };
+
+    const sectionMap = {};
+    const sectionOrder = [];
+    const backgroundCards = [];
+    questions.forEach((q, index) => {
+      if (isBackgroundQuestion(q)) {
+        backgroundCards.push(renderQuestionCard(q, index));
+        return;
+      }
+
+      const sectionName = q.section || "未分類";
+      if (!sectionMap[sectionName]) {
+        sectionMap[sectionName] = { questions: [] };
+        sectionOrder.push(sectionName);
+      }
+      sectionMap[sectionName].questions.push({ q, index });
+    });
+
+    if (el.frontQuestionContainer) {
+      el.frontQuestionContainer.innerHTML = backgroundCards.join("");
+    }
+
+    const html = sectionOrder
+      .map((sectionName) => {
+        const section = sectionMap[sectionName];
+        const sectionTitleHtml = `<h4 class="text-base font-black text-indigo-700 border-b border-indigo-100 pb-3">${escapeHtml(sectionName)}</h4>`;
+        const questionCards = section.questions
+          .map((item) => renderQuestionCard(item.q, item.index))
+          .join("");
+        return `
+          <section class="space-y-4">
+            ${sectionTitleHtml}
+            <div class="space-y-4">${questionCards}</div>
+          </section>
         `;
       })
       .join("");
+
+    el.questionContainer.innerHTML =
+      html ||
+      '<p class="text-sm text-slate-500 leading-7">目前沒有進階維度題目。</p>';
   }
 
   function clearMessage() {
