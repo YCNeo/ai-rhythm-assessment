@@ -1,329 +1,257 @@
-<script type="module">
-  import { GoogleGenAI, Type } from "@google/genai";
-
-  let FIXED_SOURCES = [];
-
-  const state = {
-    images: [],
-    isAnalyzing: false,
-    userInfo: {
-      email: "",
-      industry: "",
-      industryOther: "",
-      occupation: "",
-      occupationOther: "",
-    },
-  };
-
-  const elements = {
-    inputEmail: document.getElementById("input-email"),
-    selectIndustry: document.getElementById("select-industry"),
-    inputIndustryOther: document.getElementById("input-industry-other"),
-    selectOccupation: document.getElementById("select-occupation"),
-    inputOccupationOther: document.getElementById("input-occupation-other"),
-    inputImages: document.getElementById("input-images"),
-    imageGrid: document.getElementById("image-grid"),
-    uploadLabel: document.getElementById("upload-label"),
-    btnAnalyze: document.getElementById("btn-analyze"),
-    btnText: document.getElementById("btn-text"),
-    loader: document.getElementById("loader"),
-    iconSend: document.getElementById("icon-send"),
-    errorBox: document.getElementById("error-box"),
-    errorMsg: document.getElementById("error-msg"),
-    resultsArea: document.getElementById("results-area"),
-    welcomeState: document.getElementById("welcome-state"),
-  };
-
-  // 初始化：取得雲端固定資料
-  async function init() {
-    if (window.google && google.script && google.script.run) {
-      google.script.run
-        .withSuccessHandler((data) => {
-          FIXED_SOURCES = data;
-          console.log("已載入固定資料:", FIXED_SOURCES);
-        })
-        .getFixedSources();
+<script>
+  function loadAppData() {
+    const bootstrapEl = document.getElementById("app-bootstrap");
+    const raw = bootstrapEl ? bootstrapEl.dataset.app : "{}";
+    try {
+      return JSON.parse(raw || "{}");
+    } catch (err) {
+      console.error("APP_DATA 解析失敗:", err);
+      return {};
     }
   }
-  init();
 
-  // 全域移除圖片功能
-  window.removeImage = (id) => {
-    state.images = state.images.filter((img) => img.id !== id);
-    renderImages();
+  const appData = loadAppData();
+  let questionnaire = appData.questionnaire || { questions: [] };
+
+  const el = {
+    versionBadge: document.getElementById("version-badge"),
+    surveyTitle: document.getElementById("survey-title"),
+    surveyDesc: document.getElementById("survey-desc"),
+    questionContainer: document.getElementById("question-container"),
+    respondentName: document.getElementById("respondent-name"),
+    respondentEmail: document.getElementById("respondent-email"),
+    submitBtn: document.getElementById("submit-btn"),
+    errorBox: document.getElementById("error-box"),
+    successBox: document.getElementById("success-box"),
   };
 
-  const handleInfoChange = () => {
-    state.userInfo.email = elements.inputEmail.value;
-    state.userInfo.industry = elements.selectIndustry.value;
-    state.userInfo.industryOther = elements.inputIndustryOther.value;
-    state.userInfo.occupation = elements.selectOccupation.value;
-    state.userInfo.occupationOther = elements.inputOccupationOther.value;
+  function escapeHtml(text) {
+    return String(text || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
 
-    elements.inputIndustryOther.classList.toggle(
-      "hidden",
-      state.userInfo.industry !== "其他",
-    );
-    elements.inputOccupationOther.classList.toggle(
-      "hidden",
-      state.userInfo.occupation !== "其他",
-    );
+  function toDomKey(questionId) {
+    return `q-${String(questionId || "").replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+  }
 
-    updateAnalyzeButton();
-  };
+  function renderHeader() {
+    const requested =
+      appData.requestedVersionId ||
+      new URLSearchParams(location.search).get("v") ||
+      "";
+    const active = appData.activeVersionId || questionnaire.id || "";
+    const fallbackLabel =
+      requested && requested !== active
+        ? ` (找不到 ${requested}，已改用 ${active})`
+        : "";
 
-  // 監聽所有輸入與選擇框
-  [
-    "inputEmail",
-    "selectIndustry",
-    "inputIndustryOther",
-    "selectOccupation",
-    "inputOccupationOther",
-  ].forEach((id) => {
-    const el = elements[id];
-    if (el) {
-      el.addEventListener("input", handleInfoChange);
-      el.addEventListener("change", handleInfoChange);
+    el.versionBadge.textContent = `版本: ${active}${fallbackLabel}`;
+    el.surveyTitle.textContent = questionnaire.title || "問卷";
+    el.surveyDesc.textContent = questionnaire.description || "";
+  }
+
+  function renderQuestions() {
+    const questions = questionnaire.questions || [];
+    if (!questions.length) {
+      el.questionContainer.innerHTML =
+        '<p class="text-sm text-slate-500">目前此版本沒有題目。</p>';
+      return;
     }
-  });
 
-  elements.inputImages.onchange = (e) => {
-    const files = Array.from(e.target.files);
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64 = event.target.result;
-        const id = Math.random().toString(36).substr(2, 9);
-        state.images.push({
-          id,
-          file,
-          base64,
-          preview: URL.createObjectURL(file),
-        });
-        renderImages();
-      };
-      reader.readAsDataURL(file);
-    });
-    e.target.value = ""; // 重置 file input 以允許上傳同名檔案
-  };
+    el.questionContainer.innerHTML = questions
+      .map((q, index) => {
+        const requiredMark = q.required
+          ? '<span class="text-red-500">*</span>'
+          : "";
+        const title = `<p class="font-bold text-base">${index + 1}. ${escapeHtml(q.title)} ${requiredMark}</p>`;
 
-  elements.btnAnalyze.onclick = async () => {
-    if (state.isAnalyzing || !isReady()) return;
+        if (q.type === "single") {
+          const domKey = toDomKey(q.id);
+          const options = (q.options || [])
+            .map(
+              (opt) => `
+              <label class="flex items-center gap-2 text-sm text-slate-700">
+                <input type="radio" name="${domKey}" value="${escapeHtml(opt)}" class="accent-indigo-600" />
+                <span>${escapeHtml(opt)}</span>
+              </label>
+            `,
+            )
+            .join("");
 
-    setLoading(true);
-    showError(null);
+          return `
+            <div class="space-y-2">
+              ${title}
+              <div class="space-y-2">${options}</div>
+            </div>
+          `;
+        }
+
+        const domKey = toDomKey(q.id);
+        const placeholder = escapeHtml(q.placeholder || "請輸入答案");
+        return `
+          <div class="space-y-2">
+            ${title}
+            <textarea
+              id="${domKey}"
+              class="w-full rounded-xl border border-slate-200 px-3 py-2 bg-slate-50 min-h-28"
+              placeholder="${placeholder}"
+            ></textarea>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  function clearMessage() {
+    el.errorBox.classList.add("hidden");
+    el.errorBox.textContent = "";
+    el.successBox.classList.add("hidden");
+    el.successBox.textContent = "";
+  }
+
+  function showError(message) {
+    el.errorBox.textContent = message;
+    el.errorBox.classList.remove("hidden");
+  }
+
+  function showSuccess(message) {
+    el.successBox.textContent = message;
+    el.successBox.classList.remove("hidden");
+  }
+
+  function collectAnswers() {
+    const questions = questionnaire.questions || [];
+    const answers = [];
+
+    for (const q of questions) {
+      let value = "";
+      const domKey = toDomKey(q.id);
+
+      if (q.type === "single") {
+        const inputs = document.getElementsByName(domKey);
+        const checked = Array.from(inputs).find((item) => item.checked);
+        value = checked ? checked.value : "";
+      } else {
+        const input = document.getElementById(domKey);
+        value = input ? input.value.trim() : "";
+      }
+
+      if (q.required && !value) {
+        throw new Error(`請完成必填題目：「${q.title}」`);
+      }
+
+      answers.push({
+        questionId: q.id,
+        questionTitle: q.title,
+        answer: value,
+      });
+    }
+
+    return answers;
+  }
+
+  function validateRespondent(name, email) {
+    if (!name) {
+      throw new Error("請輸入姓名。");
+    }
+    if (!email) {
+      throw new Error("請輸入電子郵件。");
+    }
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(email)) {
+      throw new Error("電子郵件格式不正確。");
+    }
+  }
+
+  function submit() {
+    clearMessage();
 
     try {
-      const result = await runAnalysis();
-      renderResults(result);
+      const name = el.respondentName.value.trim();
+      const email = el.respondentEmail.value.trim();
+      validateRespondent(name, email);
 
-      // 存檔 Log
-      if (window.google && google.script && google.script.run) {
-        google.script.run.saveData({
-          email: state.userInfo.email,
-          industry:
-            state.userInfo.industry === "其他"
-              ? state.userInfo.industryOther
-              : state.userInfo.industry,
-          occupation:
-            state.userInfo.occupation === "其他"
-              ? state.userInfo.occupationOther
-              : state.userInfo.occupation,
-          summary: result.summary,
-          suggestions: result.suggestions,
-        });
+      const answers = collectAnswers();
+      const payload = {
+        versionId: questionnaire.id || "unknown",
+        versionTitle: questionnaire.title || "",
+        name: name,
+        email: email,
+        answers: answers,
+      };
+
+      el.submitBtn.disabled = true;
+      el.submitBtn.textContent = "送出中...";
+
+      if (!(window.google && google.script && google.script.run)) {
+        throw new Error("目前不在 Apps Script 環境，無法送出。");
       }
+
+      google.script.run
+        .withSuccessHandler((result) => {
+          el.submitBtn.disabled = false;
+          el.submitBtn.textContent = "送出問卷";
+
+          if (result === "OK") {
+            showSuccess("送出成功，感謝填答。");
+          } else {
+            showError(`送出失敗：${result}`);
+          }
+        })
+        .withFailureHandler((err) => {
+          el.submitBtn.disabled = false;
+          el.submitBtn.textContent = "送出問卷";
+          showError(`送出失敗：${err.message || err}`);
+        })
+        .saveQuestionnaireResponse(payload);
     } catch (err) {
-      console.error(err);
-      showError(
-        err.message || "分析過程發生錯誤，請檢查您的 API Key 或網路連線。",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  function isReady() {
-    const emailFilled =
-      state.userInfo.email && state.userInfo.email.trim() !== "";
-    const industryReady =
-      state.userInfo.industry &&
-      state.userInfo.industry !== "" &&
-      (state.userInfo.industry !== "其他" ||
-        (state.userInfo.industryOther &&
-          state.userInfo.industryOther.trim() !== ""));
-    const occupationReady =
-      state.userInfo.occupation &&
-      state.userInfo.occupation !== "" &&
-      (state.userInfo.occupation !== "其他" ||
-        (state.userInfo.occupationOther &&
-          state.userInfo.occupationOther.trim() !== ""));
-    const imagesReady = state.images.length > 0;
-
-    return emailFilled && industryReady && occupationReady && imagesReady;
-  }
-
-  function renderImages() {
-    // 先把 label 暫存，避免清空 innerHTML 後遺失
-    const label = elements.uploadLabel;
-    elements.imageGrid.innerHTML = "";
-    elements.imageGrid.appendChild(label);
-
-    state.images.forEach((img) => {
-      const div = document.createElement("div");
-      div.className =
-        "relative aspect-square rounded-2xl overflow-hidden shadow-sm bg-white border border-slate-200 fade-in";
-      div.innerHTML = `
-      <img src="${img.preview}" class="w-full h-full object-cover">
-      <button onclick="window.removeImage('${img.id}')" class="absolute top-2 right-2 bg-red-500/90 hover:bg-red-600 text-white rounded-full p-1 shadow-lg transition-all active:scale-90 z-10">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-    `;
-      elements.imageGrid.insertBefore(div, label);
-    });
-
-    updateAnalyzeButton();
-  }
-
-  function updateAnalyzeButton() {
-    const ready = isReady();
-    const analyzing = state.isAnalyzing;
-
-    elements.btnAnalyze.disabled = !ready || analyzing;
-
-    if (ready && !analyzing) {
-      elements.btnAnalyze.className =
-        "w-full max-w-md mx-auto h-16 rounded-3xl font-black text-lg shadow-2xl flex items-center justify-center gap-3 transition-all bg-indigo-600 text-white shadow-indigo-300 pointer-events-auto";
-      elements.btnText.innerText = `開始分析 (${state.images.length})`;
-    } else {
-      elements.btnAnalyze.className =
-        "w-full max-w-md mx-auto h-16 rounded-3xl font-black text-lg shadow-2xl flex items-center justify-center gap-3 transition-all bg-slate-200 text-slate-400 cursor-not-allowed pointer-events-auto";
-      elements.btnText.innerText = analyzing
-        ? "正在深度分析中..."
-        : "請填寫完整資訊";
+      showError(err.message || "送出失敗，請稍後再試。");
     }
   }
 
-  function setLoading(loading) {
-    state.isAnalyzing = loading;
-    elements.loader.classList.toggle("hidden", !loading);
-    elements.iconSend.classList.toggle("hidden", loading);
-    updateAnalyzeButton();
+  function loadQuestionnaireFromServerIfNeeded() {
+    const hasQuestions =
+      questionnaire &&
+      Array.isArray(questionnaire.questions) &&
+      questionnaire.questions.length > 0;
+
+    if (hasQuestions) {
+      renderHeader();
+      renderQuestions();
+      return;
+    }
+
+    if (!(window.google && google.script && google.script.run)) {
+      renderHeader();
+      renderQuestions();
+      return;
+    }
+
+    const requestedVersionId =
+      new URLSearchParams(location.search).get("v") ||
+      appData.requestedVersionId ||
+      "v1";
+
+    google.script.run
+      .withSuccessHandler((result) => {
+        questionnaire = result || { questions: [] };
+        appData.requestedVersionId = requestedVersionId;
+        appData.activeVersionId = questionnaire.id || requestedVersionId;
+        appData.questionnaire = questionnaire;
+        renderHeader();
+        renderQuestions();
+      })
+      .withFailureHandler(() => {
+        renderHeader();
+        renderQuestions();
+      })
+      .getQuestionnaireById(requestedVersionId);
   }
 
-  function showError(msg) {
-    elements.errorBox.classList.toggle("hidden", !msg);
-    if (msg) elements.errorMsg.innerText = msg;
-  }
-
-  async function runAnalysis() {
-    const API_KEY = "YOUR_API_KEY";
-    // const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const ai = new GoogleGenAI({ apiKey: API_KEY });
-    const sourceContext =
-      FIXED_SOURCES.length > 0
-        ? FIXED_SOURCES.map((s) => `${s.title}: ${s.content}`).join("\n")
-        : "請根據專業商業文件標準與商務禮儀進行分析。";
-
-    const imageParts = state.images.map((img) => ({
-      inlineData: {
-        mimeType: img.file.type,
-        data: img.base64.split(",")[1],
-      },
-    }));
-
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro",
-      contents: {
-        parts: [
-          ...imageParts,
-          {
-            text: `你是一位資深的文件審閱與策略顧問。
-使用者資訊：
-行業：${state.userInfo.industry === "其他" ? state.userInfo.industryOther : state.userInfo.industry}
-職業：${state.userInfo.occupation === "其他" ? state.userInfo.occupationOther : state.userInfo.occupation}
-
-請根據以下「資料源」作為規範標準，分析我上傳的照片中的手寫文字內容，並針對手寫內容提供具體的「行動建議」。
-
-資料源規範：
-${sourceContext}
-
-請以繁體中文回答，並回傳建議的修改內容。`,
-          },
-        ],
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            summary: {
-              type: Type.STRING,
-              description: "對整體內容的專業分析與核心問題總結",
-            },
-            suggestions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  originalText: {
-                    type: Type.STRING,
-                    description: "原本的手寫文字或識別內容",
-                  },
-                  suggestedEdit: {
-                    type: Type.STRING,
-                    description: "建議的修改後文字或對應行動方案",
-                  },
-                  reason: {
-                    type: Type.STRING,
-                    description: "建議的背後原因或符合的專業標準",
-                  },
-                },
-              },
-            },
-          },
-          required: ["summary", "suggestions"],
-        },
-      },
-    });
-
-    return JSON.parse(response.text);
-  }
-
-  function renderResults(result) {
-    elements.welcomeState.classList.add("hidden");
-    elements.resultsArea.classList.remove("hidden");
-    elements.resultsArea.innerHTML = `
-    <div class="bg-white p-6 rounded-3xl shadow-xl border border-slate-100 fade-in">
-      <h2 class="text-xl font-black mb-2 text-indigo-600">分析摘要</h2>
-      <p class="text-slate-600 leading-relaxed">${result.summary}</p>
-    </div>
-    <div class="space-y-4">
-      <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">具體行動建議</h3>
-      ${result.suggestions
-        .map(
-          (s) => `
-        <div class="bg-white rounded-2xl border border-slate-100 shadow-md p-5 fade-in">
-          <div class="mb-3">
-            <span class="text-[10px] font-bold text-red-400 bg-red-50 px-2 py-1 rounded-full uppercase">辨識內容</span>
-            <p class="text-slate-500 text-sm mt-1 line-through">${s.originalText}</p>
-          </div>
-          <div class="mb-3">
-            <span class="text-[10px] font-bold text-green-500 bg-green-50 px-2 py-1 rounded-full uppercase">行動建議</span>
-            <p class="text-indigo-900 font-bold text-lg mt-1">${s.suggestedEdit}</p>
-          </div>
-          <div class="pt-3 border-t border-slate-50">
-            <p class="text-slate-500 text-xs italic">💡 顧問觀點：${s.reason}</p>
-          </div>
-        </div>
-      `,
-        )
-        .join("")}
-    </div>
-  `;
-    // 自動捲動到結果區
-    elements.resultsArea.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
+  el.submitBtn.addEventListener("click", submit);
+  loadQuestionnaireFromServerIfNeeded();
 </script>

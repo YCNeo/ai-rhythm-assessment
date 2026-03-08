@@ -1,10 +1,21 @@
 /**
  * 處理 Web App GET 請求
+ * 透過 ?v=versionId 決定要載入的問卷版本
  */
-function doGet() {
-  return HtmlService.createTemplateFromFile("index")
+function doGet(e) {
+  const requestedVersionId = (e && e.parameter && e.parameter.v) || "v1";
+  const questionnaire = getQuestionnaireById(requestedVersionId);
+
+  const template = HtmlService.createTemplateFromFile("index");
+  template.appDataJson = JSON.stringify({
+    requestedVersionId: requestedVersionId,
+    activeVersionId: questionnaire.id,
+    questionnaire: questionnaire,
+  });
+
+  return template
     .evaluate()
-    .setTitle("AI 分析與行動建議")
+    .setTitle(questionnaire.title || "問卷")
     .addMetaTag(
       "viewport",
       "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no",
@@ -125,6 +136,60 @@ function saveData(payload) {
     return "OK";
   } catch (e) {
     console.error("存檔失敗: " + e.toString());
+    return "Error: " + e.toString();
+  }
+}
+
+/**
+ * 儲存問卷作答結果
+ */
+function saveQuestionnaireResponse(payload) {
+  try {
+    const root = getRootFolder();
+    const files = root.getFilesByName("問卷作答紀錄");
+    let ss;
+
+    if (files.hasNext()) {
+      ss = SpreadsheetApp.open(files.next());
+    } else {
+      ss = SpreadsheetApp.create("問卷作答紀錄");
+      const ssFile = DriveApp.getFileById(ss.getId());
+      root.addFile(ssFile);
+      DriveApp.getRootFolder().removeFile(ssFile);
+    }
+
+    const today = Utilities.formatDate(
+      new Date(),
+      Session.getScriptTimeZone(),
+      "yyyy-MM-dd",
+    );
+    let sheet = ss.getSheetByName(today);
+
+    if (!sheet) {
+      sheet = ss.insertSheet(today);
+      sheet.appendRow([
+        "時間",
+        "版本編號",
+        "版本標題",
+        "作答者姓名",
+        "作答者電子郵件",
+        "答案(JSON)",
+      ]);
+      sheet.setFrozenRows(1);
+    }
+
+    sheet.appendRow([
+      new Date(),
+      payload.versionId || "unknown",
+      payload.versionTitle || "",
+      payload.name || "",
+      payload.email || "",
+      JSON.stringify(payload.answers || []),
+    ]);
+
+    return "OK";
+  } catch (e) {
+    console.error("問卷存檔失敗: " + e.toString());
     return "Error: " + e.toString();
   }
 }
