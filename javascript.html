@@ -34,6 +34,9 @@
   const uiState = {
     latestSubmission: null,
     latestReportText: "",
+    latestPdfFileId: "",
+    latestPdfFileUrl: "",
+    latestSubmissionId: "",
   };
 
   function escapeHtml(text) {
@@ -261,8 +264,12 @@
   }
 
   function formatInlineMarkdown(text) {
-    const escaped = escapeHtml(text || "");
-    return escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    let escaped = escapeHtml(text || "");
+    escaped = escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    // 清理常見殘留標記：例如 "* 內容" 或結尾孤立星號
+    escaped = escaped.replace(/^\*\s+/, "");
+    escaped = escaped.replace(/\s+\*$/g, "");
+    return escaped;
   }
 
   function markdownToHtml(markdownText) {
@@ -326,7 +333,13 @@
         return;
       }
 
-      if ((matched = line.match(/^-+\s+(.+)/))) {
+      if (/^---+$/.test(line)) {
+        closeLists();
+        html.push("<hr />");
+        return;
+      }
+
+      if ((matched = line.match(/^[-*]\s+(.+)/))) {
         if (inOl) {
           html.push("</ol>");
           inOl = false;
@@ -410,7 +423,7 @@
       uiState.latestSubmission = payload;
 
       el.submitBtn.disabled = true;
-      el.submitBtn.textContent = "分析中...";
+      el.submitBtn.textContent = "分析並準備PDF中...";
 
       if (!(window.google && google.script && google.script.run)) {
         throw new Error("目前不在 Apps Script 環境，無法送出。");
@@ -421,26 +434,35 @@
           el.submitBtn.disabled = false;
           el.submitBtn.textContent = "送出問卷";
 
-          const reportText = (result && result.reportText) || "";
+          if (!result || result.status !== "OK") {
+            showError(`送出失敗：${(result && result.message) || "未知錯誤"}`);
+            return;
+          }
+
+          const reportText = result.reportText || "";
           if (!reportText) {
             showError("AI 回傳內容為空，請稍後再試。");
             return;
           }
-
           uiState.latestReportText = reportText;
+          uiState.latestPdfFileId = result.pdfFileId || "";
+          uiState.latestPdfFileUrl = result.pdfFileUrl || "";
+          uiState.latestSubmissionId = result.submissionId || "";
           openReportModal(reportText);
-          showSuccess("問卷已完成分析，請確認報告後寄送 PDF。");
-
-          if (window.google && google.script && google.script.run) {
-            google.script.run.saveQuestionnaireResponse(payload);
-          }
+          setReportSendStatus(
+            "PDF 已先建立完成，確認後可直接寄信。",
+            "success",
+          );
+          showSuccess("問卷已完成分析並建立 PDF，請確認後寄送。");
         })
         .withFailureHandler((err) => {
           el.submitBtn.disabled = false;
           el.submitBtn.textContent = "送出問卷";
           showError(`送出失敗：${err.message || err}`);
         })
-        .generateAiReport({
+        .processQuestionnaireSubmission({
+          name: payload.name,
+          email: payload.email,
           versionId: payload.versionId,
           versionTitle: payload.versionTitle,
           answers: payload.answers,
@@ -454,8 +476,9 @@
     clearMessage();
     const base = uiState.latestSubmission;
     const reportText = uiState.latestReportText;
+    const pdfFileId = uiState.latestPdfFileId;
 
-    if (!base || !reportText) {
+    if (!base || !reportText || !pdfFileId) {
       showError("找不到可寄送的報告內容，請先送出問卷並完成分析。");
       setReportSendStatus("找不到可寄送的報告內容。", "error");
       return;
@@ -493,8 +516,9 @@
         email: base.email,
         versionId: base.versionId,
         versionTitle: base.versionTitle,
-        answers: base.answers,
         reportText: reportText,
+        pdfFileId: pdfFileId,
+        submissionId: uiState.latestSubmissionId || "",
       });
   }
 

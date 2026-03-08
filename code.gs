@@ -212,9 +212,12 @@ function generateAiReport(payload) {
 }
 
 /**
- * 將 AI 報告轉 PDF 並寄送給使用者，並寫入試算表紀錄
+ * 問卷主流程：
+ * 1) 生成 AI 報告
+ * 2) 先產生 PDF 並存檔
+ * 3) 立即寫入當日試算表分頁（時間/姓名/email/PDF）
  */
-function sendReportPdf(payload) {
+function processQuestionnaireSubmission(payload) {
   try {
     const name = payload && payload.name ? payload.name : "";
     const email = payload && payload.email ? payload.email : "";
@@ -222,18 +225,22 @@ function sendReportPdf(payload) {
     const versionTitle =
       payload && payload.versionTitle ? payload.versionTitle : "";
     const answers = (payload && payload.answers) || [];
-    const reportText = payload && payload.reportText ? payload.reportText : "";
 
+    if (!name) {
+      return { status: "ERROR", message: "缺少姓名。" };
+    }
     if (!email) {
-      return { status: "ERROR", message: "缺少 email，無法寄送 PDF。" };
-    }
-    if (!reportText) {
-      return { status: "ERROR", message: "缺少 AI 報告內容，無法產生 PDF。" };
+      return { status: "ERROR", message: "缺少 email。" };
     }
 
-    const remainingQuota = MailApp.getRemainingDailyQuota();
-    if (remainingQuota <= 0) {
-      return { status: "ERROR", message: "今日寄信額度已用盡，請明天再試。" };
+    const reportResult = generateAiReport({
+      versionId: versionId,
+      versionTitle: versionTitle,
+      answers: answers,
+    });
+    const reportText = reportResult.reportText || "";
+    if (!reportText) {
+      return { status: "ERROR", message: "AI 回傳內容為空。" };
     }
 
     const pdfBlob = buildReportPdfBlob_({
@@ -242,6 +249,88 @@ function sendReportPdf(payload) {
       versionTitle: versionTitle,
       reportText: reportText,
     });
+
+    const root = getRootFolder();
+    const pdfFile = root.createFile(pdfBlob);
+    const submissionId =
+      Utilities.formatDate(
+        new Date(),
+        Session.getScriptTimeZone(),
+        "yyyyMMddHHmmss",
+      ) +
+      "_" +
+      Math.floor(Math.random() * 1000000);
+
+    saveSubmissionRecord_({
+      submissionId: submissionId,
+      name: name,
+      email: email,
+      versionId: versionId,
+      versionTitle: versionTitle,
+      pdfFileId: pdfFile.getId(),
+      pdfFileUrl: pdfFile.getUrl(),
+      answers: answers,
+      reportText: reportText,
+    });
+
+    return {
+      status: "OK",
+      submissionId: submissionId,
+      reportText: reportText,
+      pdfFileId: pdfFile.getId(),
+      pdfFileUrl: pdfFile.getUrl(),
+      versionId: versionId,
+      versionTitle: versionTitle,
+    };
+  } catch (e) {
+    return { status: "ERROR", message: e.toString() };
+  }
+}
+
+/**
+ * 將 AI 報告轉 PDF 並寄送給使用者，並寫入試算表紀錄
+ */
+function sendReportPdf(payload) {
+  try {
+    const name = payload && payload.name ? payload.name : "";
+    const email = payload && payload.email ? payload.email : "";
+    const versionId = payload && payload.versionId ? payload.versionId : "";
+    const versionTitle =
+      payload && payload.versionTitle ? payload.versionTitle : "";
+    const reportText = payload && payload.reportText ? payload.reportText : "";
+    const pdfFileId = payload && payload.pdfFileId ? payload.pdfFileId : "";
+
+    if (!email) {
+      return { status: "ERROR", message: "缺少 email，無法寄送 PDF。" };
+    }
+
+    const remainingQuota = MailApp.getRemainingDailyQuota();
+    if (remainingQuota <= 0) {
+      return { status: "ERROR", message: "今日寄信額度已用盡，請明天再試。" };
+    }
+
+    let pdfBlob;
+    let resolvedPdfFileId = pdfFileId;
+    let resolvedPdfFileUrl = "";
+    if (pdfFileId) {
+      const file = DriveApp.getFileById(pdfFileId);
+      pdfBlob = file.getBlob();
+      resolvedPdfFileUrl = file.getUrl();
+    } else {
+      if (!reportText) {
+        return { status: "ERROR", message: "缺少 PDF 與報告內容，無法寄送。" };
+      }
+      pdfBlob = buildReportPdfBlob_({
+        name: name,
+        versionId: versionId || "v1",
+        versionTitle: versionTitle || "",
+        reportText: reportText,
+      });
+      const root = getRootFolder();
+      const file = root.createFile(pdfBlob);
+      resolvedPdfFileId = file.getId();
+      resolvedPdfFileUrl = file.getUrl();
+    }
 
     const ownerEmail = "";
     const mailOptions = {
@@ -261,21 +350,40 @@ function sendReportPdf(payload) {
       email: email,
       versionId: versionId,
       versionTitle: versionTitle,
-      answers: answers,
+      answers: [],
       reportText: reportText,
-      pdfFileId: "",
-      pdfFileUrl: "",
+      pdfFileId: resolvedPdfFileId || "",
+      pdfFileUrl: resolvedPdfFileUrl || "",
       emailSentTo: email,
       emailBcc: ownerEmail || "",
       mailQuotaBefore: remainingQuota,
       mailQuotaAfter: quotaAfter,
     });
 
+    // 保險補寫：若提交階段漏寫，寄信階段至少仍會留下核心紀錄
+    saveSubmissionRecord_({
+      submissionId:
+        (payload && payload.submissionId) ||
+        Utilities.formatDate(
+          new Date(),
+          Session.getScriptTimeZone(),
+          "yyyyMMddHHmmss",
+        ) + "_mail",
+      name: name,
+      email: email,
+      versionId: versionId || "",
+      versionTitle: versionTitle || "",
+      pdfFileId: resolvedPdfFileId || "",
+      pdfFileUrl: resolvedPdfFileUrl || "",
+      answers: [],
+      reportText: reportText || "",
+    });
+
     return {
       status: "OK",
       message: "PDF 已寄送，若未收到請檢查垃圾郵件匣。",
-      pdfFileId: "",
-      pdfFileUrl: "",
+      pdfFileId: resolvedPdfFileId || "",
+      pdfFileUrl: resolvedPdfFileUrl || "",
       sentTo: email,
       bcc: "",
       mailQuotaBefore: remainingQuota,
@@ -521,7 +629,7 @@ function buildReportPdfBlob_(payload) {
   );
   const safeName = payload.name || "學員";
   const safeVersion = payload.versionTitle || payload.versionId || "v1";
-  const reportTextEscaped = escapeHtml_(payload.reportText || "");
+  const reportHtml = markdownToHtmlForPdf_(payload.reportText || "");
 
   const html = `
 <!doctype html>
@@ -532,13 +640,23 @@ function buildReportPdfBlob_(payload) {
       body { font-family: Arial, "Microsoft JhengHei", sans-serif; padding: 24px; color: #1f2937; line-height: 1.8; }
       h1 { font-size: 20px; margin: 0 0 12px 0; }
       .meta { color: #64748b; font-size: 12px; margin-bottom: 20px; }
-      .content { white-space: pre-wrap; font-size: 13px; }
+      .content { font-size: 13px; }
+      .content h1, .content h2, .content h3, .content h4 { margin: 10px 0 6px 0; line-height: 1.4; color: #0f172a; }
+      .content h1 { font-size: 20px; }
+      .content h2 { font-size: 18px; }
+      .content h3 { font-size: 16px; }
+      .content h4 { font-size: 14px; }
+      .content p { margin: 6px 0; line-height: 1.9; }
+      .content ul, .content ol { margin: 6px 0 10px 20px; }
+      .content li { margin: 4px 0; line-height: 1.8; }
+      .content strong { font-weight: bold; color: #0f172a; }
+      .content hr { border: 0; border-top: 1px solid #e2e8f0; margin: 12px 0; }
     </style>
   </head>
   <body>
     <h1>節奏工作法個人化解析報告</h1>
     <div class="meta">學員：${escapeHtml_(safeName)} ｜ 版本：${escapeHtml_(safeVersion)} ｜ 產生時間：${escapeHtml_(nowText)}</div>
-    <div class="content">${reportTextEscaped}</div>
+    <div class="content">${reportHtml}</div>
   </body>
 </html>
 `;
@@ -556,6 +674,99 @@ function buildReportPdfBlob_(payload) {
         ".pdf",
     );
   return pdfBlob;
+}
+
+function markdownToHtmlForPdf_(markdownText) {
+  const lines = String(markdownText || "")
+    .replace(/\r\n/g, "\n")
+    .split("\n");
+  const html = [];
+  let inUl = false;
+  let inOl = false;
+
+  function closeLists() {
+    if (inUl) {
+      html.push("</ul>");
+      inUl = false;
+    }
+    if (inOl) {
+      html.push("</ol>");
+      inOl = false;
+    }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) {
+      closeLists();
+      continue;
+    }
+
+    let matched;
+    if ((matched = line.match(/^####\s+(.+)/))) {
+      closeLists();
+      html.push("<h4>" + formatInlineMarkdownForPdf_(matched[1]) + "</h4>");
+      continue;
+    }
+    if ((matched = line.match(/^###\s+(.+)/))) {
+      closeLists();
+      html.push("<h3>" + formatInlineMarkdownForPdf_(matched[1]) + "</h3>");
+      continue;
+    }
+    if ((matched = line.match(/^##\s+(.+)/))) {
+      closeLists();
+      html.push("<h2>" + formatInlineMarkdownForPdf_(matched[1]) + "</h2>");
+      continue;
+    }
+    if ((matched = line.match(/^#\s+(.+)/))) {
+      closeLists();
+      html.push("<h1>" + formatInlineMarkdownForPdf_(matched[1]) + "</h1>");
+      continue;
+    }
+    if ((matched = line.match(/^\d+\.\s+(.+)/))) {
+      if (inUl) {
+        html.push("</ul>");
+        inUl = false;
+      }
+      if (!inOl) {
+        html.push("<ol>");
+        inOl = true;
+      }
+      html.push("<li>" + formatInlineMarkdownForPdf_(matched[1]) + "</li>");
+      continue;
+    }
+    if (/^---+$/.test(line)) {
+      closeLists();
+      html.push("<hr />");
+      continue;
+    }
+    if ((matched = line.match(/^[-*]\s+(.+)/))) {
+      if (inOl) {
+        html.push("</ol>");
+        inOl = false;
+      }
+      if (!inUl) {
+        html.push("<ul>");
+        inUl = true;
+      }
+      html.push("<li>" + formatInlineMarkdownForPdf_(matched[1]) + "</li>");
+      continue;
+    }
+
+    closeLists();
+    html.push("<p>" + formatInlineMarkdownForPdf_(line) + "</p>");
+  }
+
+  closeLists();
+  return html.join("");
+}
+
+function formatInlineMarkdownForPdf_(text) {
+  let escaped = escapeHtml_(text || "");
+  escaped = escaped.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  escaped = escaped.replace(/^\*\s+/, "");
+  escaped = escaped.replace(/\s+\*$/g, "");
+  return escaped;
 }
 
 function getOrCreateSubFolder_(parentFolder, name) {
@@ -613,23 +824,86 @@ function saveReportRecord_(payload) {
   ]);
 }
 
+function saveSubmissionRecord_(payload) {
+  const ss = getOrCreateNamedSpreadsheet_(
+    "問卷填答與報告紀錄",
+    "SUBMISSION_RECORD_SHEET_ID",
+  );
+
+  const today = Utilities.formatDate(
+    new Date(),
+    Session.getScriptTimeZone(),
+    "yyyy-MM-dd",
+  );
+  let sheet = ss.getSheetByName(today);
+  if (!sheet) {
+    sheet = ss.insertSheet(today);
+    sheet.appendRow([
+      "時間",
+      "提交ID",
+      "姓名",
+      "Email",
+      "PDF檔案ID",
+      "PDF檔案網址",
+      "版本編號",
+      "版本標題",
+      "答案(JSON)",
+      "AI回傳文字",
+    ]);
+    sheet.setFrozenRows(1);
+  }
+
+  sheet.appendRow([
+    new Date(),
+    payload.submissionId || "",
+    payload.name || "",
+    payload.email || "",
+    payload.pdfFileId || "",
+    payload.pdfFileUrl || "",
+    payload.versionId || "",
+    payload.versionTitle || "",
+    JSON.stringify(payload.answers || []),
+    payload.reportText || "",
+  ]);
+}
+
 /**
  * 檢查寄信授權與配額（手動執行或前端調用）
  */
 function checkMailCapability() {
   try {
     const quota = MailApp.getRemainingDailyQuota();
+    const ss = getOrCreateNamedSpreadsheet_(
+      "問卷填答與報告紀錄",
+      "SUBMISSION_RECORD_SHEET_ID",
+    );
+    const ssId = ss.getId();
+    const driveName = DriveApp.getRootFolder().getName();
+    const tempBlob = Utilities.newBlob(
+      "auth-check",
+      "text/plain",
+      "auth-check.txt",
+    );
+    const tempFile = DriveApp.getRootFolder().createFile(tempBlob);
+    const tempFileId = tempFile.getId();
+    tempFile.setTrashed(true);
     return {
       status: "OK",
       quota: quota,
       deployerEmail: "",
-      message: "寄信權限可用",
+      spreadsheetId: ssId,
+      driveReady: !!driveName,
+      driveCreateFileTestId: tempFileId,
+      message: "寄信/試算表/雲端權限可用",
     };
   } catch (e) {
     return {
       status: "ERROR",
       quota: -1,
       deployerEmail: "",
+      spreadsheetId: "",
+      driveReady: false,
+      driveCreateFileTestId: "",
       message: e.toString(),
     };
   }
@@ -656,6 +930,15 @@ function getOrCreateNamedSpreadsheet_(title, propertyKey) {
   }
 
   const ss = SpreadsheetApp.create(title);
+  try {
+    const root = getRootFolder();
+    const file = DriveApp.getFileById(ss.getId());
+    root.addFile(file);
+    DriveApp.getRootFolder().removeFile(file);
+  } catch (e) {
+    // 若搬移失敗，至少保留已建立的試算表可用
+    console.warn("移動試算表到目標資料夾失敗: " + e.toString());
+  }
   props.setProperty(propertyKey, ss.getId());
   return ss;
 }
@@ -669,6 +952,18 @@ function authorizeRequiredScopes() {
     muteHttpExceptions: true,
   });
   MailApp.getRemainingDailyQuota();
-  SpreadsheetApp.getActive();
+  SpreadsheetApp.create("權限初始化測試_" + new Date().getTime()).getId();
+  DriveApp.getRootFolder().getName();
+  const tempBlob = Utilities.newBlob(
+    "auth-check",
+    "text/plain",
+    "auth-check.txt",
+  );
+  const tempFile = DriveApp.getRootFolder().createFile(tempBlob);
+  tempFile.setTrashed(true);
+  PropertiesService.getScriptProperties().setProperty(
+    "AUTH_CHECK",
+    String(new Date().getTime()),
+  );
   return "OK";
 }
