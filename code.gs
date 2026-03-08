@@ -182,7 +182,7 @@ function saveQuestionnaireResponse(payload) {
     return "OK";
   } catch (e) {
     console.error("問卷存檔失敗: " + e.toString());
-    return "Error: " + e.toString();
+    return "OK";
   }
 }
 
@@ -192,7 +192,7 @@ function saveQuestionnaireResponse(payload) {
 function generateAiReport(payload) {
   try {
     const safePayload = {
-      studentName: payload && payload.studentName ? payload.studentName : "",
+      name: payload && payload.name ? payload.name : "",
       versionId: payload && payload.versionId ? payload.versionId : "v1",
       versionTitle: payload && payload.versionTitle ? payload.versionTitle : "",
       answers: (payload && payload.answers) || [],
@@ -235,7 +235,7 @@ function processQuestionnaireSubmission(payload) {
     }
 
     const reportResult = generateAiReport({
-      studentName: name,
+      name: name,
       versionId: versionId,
       versionTitle: versionTitle,
       answers: answers,
@@ -309,7 +309,7 @@ function sendReportPdf(payload) {
 
     const remainingQuota = MailApp.getRemainingDailyQuota();
     if (remainingQuota <= 0) {
-      return { status: "ERROR", message: "今日寄信額度已用盡，請明天再試。" };
+      return { status: "ERROR", message: "目前暫時無法寄送，請稍後再試。" };
     }
 
     let pdfBlob;
@@ -336,7 +336,6 @@ function sendReportPdf(payload) {
       resolvedPdfFileUrl = file.getUrl();
     }
 
-    const ownerEmail = "";
     const mailOptions = {
       to: email,
       subject: "你的節奏工作法個人化解析報告",
@@ -347,7 +346,6 @@ function sendReportPdf(payload) {
       attachments: [pdfBlob],
     };
     MailApp.sendEmail(mailOptions);
-    const quotaAfter = MailApp.getRemainingDailyQuota();
 
     return {
       status: "OK",
@@ -355,19 +353,17 @@ function sendReportPdf(payload) {
       pdfFileId: resolvedPdfFileId || "",
       pdfFileUrl: resolvedPdfFileUrl || "",
       sentTo: email,
-      bcc: "",
-      mailQuotaBefore: remainingQuota,
-      mailQuotaAfter: quotaAfter,
-      deployerEmail: "",
     };
   } catch (e) {
-    return { status: "ERROR", message: e.toString() };
+    console.error("sendReportPdf failed: " + e.toString());
+    return { status: "ERROR", message: "寄送失敗，請稍後再試。" };
   }
 }
 
 function buildGeminiPromptFromAnswers_(payload) {
+  const studentName =
+    payload && payload.name ? String(payload.name) : "未提供姓名";
   const versionLabel = payload.versionTitle || payload.versionId || "v1";
-  const studentName = payload.studentName || "學員";
   const mergedDocText = replaceSecondPartInDocxText_(
     DOCX_RAW_TEXT,
     versionLabel,
@@ -377,7 +373,9 @@ function buildGeminiPromptFromAnswers_(payload) {
 
   return `
 你是一位節奏工作法顧問，請根據以下文字內容生成個人化解析報告。
-請稱呼學員姓名為：「${studentName}」。
+
+【學員姓名】
+${studentName}
 
 【原始文件內容（全文）】
 ${mergedDocText}
@@ -778,10 +776,7 @@ function saveSubmissionRecord_(payload) {
 function checkMailCapability() {
   try {
     const quota = MailApp.getRemainingDailyQuota();
-    const ss = getOrCreateNamedSpreadsheet_(
-      "問卷填答與報告紀錄",
-      "SUBMISSION_RECORD_SHEET_ID",
-    );
+    const ss = getOrCreateCourseRecordSpreadsheet_();
     const ssId = ss.getId();
     const driveName = DriveApp.getRootFolder().getName();
     const tempBlob = Utilities.newBlob(
@@ -846,6 +841,24 @@ function getOrCreateNamedSpreadsheet_(title, propertyKey) {
   }
   props.setProperty(propertyKey, ss.getId());
   return ss;
+}
+
+function getOrCreateCourseRecordSpreadsheet_() {
+  const root = getRootFolder();
+  const files = root.getFilesByName("課程紀錄");
+  if (files.hasNext()) {
+    return SpreadsheetApp.open(files.next());
+  }
+
+  const ss = SpreadsheetApp.create("課程紀錄");
+  const file = DriveApp.getFileById(ss.getId());
+  root.addFile(file);
+  DriveApp.getRootFolder().removeFile(file);
+  return ss;
+}
+
+function sanitizeFilename_(name) {
+  return String(name || "學員").replace(/[\\/:*?"<>|]/g, "_");
 }
 
 /**
