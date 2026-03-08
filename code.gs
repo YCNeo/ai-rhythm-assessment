@@ -339,10 +339,10 @@ function sendReportPdf(payload) {
     const mailOptions = {
       to: email,
       subject: "你的節奏工作法個人化解析報告",
-      body: "您好，附件為本次問卷的 AI 個人化解析報告（PDF）。",
+      body: "您好，附件為本次問卷的節奏工作法 AI 個人化解析報告（PDF）。",
       htmlBody:
-        "<p>您好，附件為本次問卷的 <b>AI 個人化解析報告</b>（PDF）。</p>" +
-        "<p>若未看到附件，請先檢查垃圾郵件匣。</p>",
+        "<p>您好，附件為本次問卷的節奏工作法 <b>AI 個人化解析報告</b>（PDF）。</p>" +
+        "<p>若未看到附件，請向講師詢問索取。</p>",
       attachments: [pdfBlob],
     };
     MailApp.sendEmail(mailOptions);
@@ -364,6 +364,11 @@ function buildGeminiPromptFromAnswers_(payload) {
   const studentName =
     payload && payload.name ? String(payload.name) : "未提供姓名";
   const versionLabel = payload.versionTitle || payload.versionId || "v1";
+  const firstPartAnswersText = buildFirstPartWithAnswers_(
+    versionLabel,
+    payload.versionId,
+    payload.answers || [],
+  );
   const mergedDocText = replaceSecondPartInDocxText_(
     DOCX_RAW_TEXT,
     versionLabel,
@@ -377,11 +382,45 @@ function buildGeminiPromptFromAnswers_(payload) {
 【學員姓名】
 ${studentName}
 
+【第一部分：學員背景資訊回答】
+${firstPartAnswersText}
+
 【原始文件內容（全文）】
 ${mergedDocText}
 
 請用繁體中文輸出完整、可執行的個人化解析報告。
+請不要輸出任何公式、方程式、LaTeX、數學語法或符號推導內容，全部改用一般文字敘述。
 `;
+}
+
+function buildFirstPartWithAnswers_(versionLabel, versionId, answers) {
+  const questionnaire = getQuestionnaireById(versionId || "v1");
+  const answerMap = {};
+  (answers || []).forEach((item) => {
+    const key = item && item.questionId ? String(item.questionId) : "";
+    if (!key) return;
+    answerMap[key] =
+      item && item.answer !== undefined && item.answer !== null
+        ? String(item.answer)
+        : "";
+  });
+
+  const firstPartQuestions = (questionnaire.questions || []).filter((q) => {
+    return q && q.section && q.section.indexOf("第一部分") === 0;
+  });
+
+  if (!firstPartQuestions.length) {
+    return "（此版本沒有第一部分題目）";
+  }
+
+  const lines = ["版本：" + versionLabel];
+  firstPartQuestions.forEach((q) => {
+    const answer = answerMap[String(q.id)] || "（未作答）";
+    lines.push(`- ${q.title}`);
+    lines.push(`  - 學員回答：${answer}`);
+  });
+
+  return lines.join("\n").trim();
 }
 
 function buildVersionSecondPartWithAnswers_(versionLabel, versionId, answers) {

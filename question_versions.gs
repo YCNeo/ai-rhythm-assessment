@@ -29,6 +29,7 @@ const COMMON_BACKGROUND_QUESTIONS = [
       "高反應型（客服/業務/行政）",
       "高專注型（工程師/企劃/設計/分析師）",
       "管理協調型（主管/專案經理）",
+      "其他",
     ],
   },
   {
@@ -37,7 +38,7 @@ const COMMON_BACKGROUND_QUESTIONS = [
     type: "single",
     title: "職級層次",
     required: true,
-    options: ["一般職員", "基層主管", "中高層決策者"],
+    options: ["一般職員", "基層主管", "中高層決策者", "其他"],
   },
   {
     id: "bg_collab_mode",
@@ -45,15 +46,15 @@ const COMMON_BACKGROUND_QUESTIONS = [
     type: "single",
     title: "團隊協作模式",
     required: true,
-    options: ["獨立作業為主", "緊密團隊協作", "跨部門協作為主"],
+    options: ["獨立作業為主", "緊密團隊協作", "跨部門協作為主", "其他"],
   },
 ];
 
 const VERSION_QUESTIONNAIRES = {
   v1: {
     id: "v1",
-    title: "節奏工作法節奏診斷問卷 v1",
-    description: "第二部分為第一版診斷題，請依過去一週實際狀況填答。",
+    title: "節奏工作法節奏診斷問卷",
+    description: "請依過去一週實際狀況填答。",
     versionQuestions: [
       {
         id: "q1",
@@ -63,7 +64,7 @@ const VERSION_QUESTIONNAIRES = {
         required: true,
         options: [
           "06:00-10:00（起跑者）",
-          "10:00-14:00（穩定者）",
+          "10:00-16:00（穩定者）",
           "16:00 以後（錨點者）",
         ],
       },

@@ -53,18 +53,16 @@
   }
 
   function renderHeader() {
-    const requested =
-      appData.requestedVersionId ||
-      new URLSearchParams(location.search).get("v") ||
-      "";
-    const active = appData.activeVersionId || questionnaire.id || "";
-    const fallbackLabel =
-      requested && requested !== active
-        ? ` (找不到 ${requested}，已改用 ${active})`
-        : "";
+    // 不顯示版本 badge
+    if (el.versionBadge) {
+      el.versionBadge.textContent = "";
+      el.versionBadge.classList.add("hidden");
+    }
 
-    el.versionBadge.textContent = `版本: ${active}${fallbackLabel}`;
-    el.surveyTitle.textContent = questionnaire.title || "問卷";
+    // 標題移除尾端版本字樣（例如：v1 / V2）
+    const rawTitle = questionnaire.title || "問卷";
+    const cleanTitle = rawTitle.replace(/\s+v\d+$/i, "").trim();
+    el.surveyTitle.textContent = cleanTitle || "問卷";
     el.surveyDesc.textContent = questionnaire.description || "";
   }
 
@@ -85,25 +83,54 @@
       const requiredMark = q.required
         ? '<span class="text-red-500">*</span>'
         : "";
-      const title = `<p class="font-bold text-base">${index + 1}. ${escapeHtml(q.title)} ${requiredMark}</p>`;
+      const rawTitle = String(q.title || "");
+      const hasOwnQuestionNo = /^\s*Q\d+\b/i.test(rawTitle);
+      const titlePrefix = hasOwnQuestionNo ? "" : `${index + 1}. `;
+      const title = `<p class="font-bold text-base">${titlePrefix}${escapeHtml(rawTitle)} ${requiredMark}</p>`;
 
       if (q.type === "single") {
         const domKey = toDomKey(q.id);
         const options = (q.options || [])
-          .map(
-            (opt) => `
-            <label class="flex items-start gap-3 text-sm leading-6 text-slate-700 rounded-xl px-2 py-1 hover:bg-slate-50">
-              <input type="radio" name="${domKey}" value="${escapeHtml(opt)}" class="accent-indigo-600" />
-              <span>${escapeHtml(opt)}</span>
+          .map((opt, optIndex) => {
+            const isOther = /其他/.test(String(opt || ""));
+            const optionValue = isOther ? "__OTHER__" : String(opt || "");
+            const otherTargetId = `${domKey}-other`;
+            return `
+            <label class="flex items-center gap-3 text-sm text-slate-700 rounded-xl px-2 py-1 hover:bg-slate-50">
+              <input
+                type="radio"
+                name="${domKey}"
+                value="${escapeHtml(optionValue)}"
+                class="accent-indigo-600 w-4 h-4 shrink-0"
+                ${isOther ? `data-other-target="${otherTargetId}"` : ""}
+              />
+              <span class="leading-7">${escapeHtml(opt)}</span>
             </label>
-          `,
-          )
+          `;
+          })
           .join("");
+
+        const hasOtherOption = (q.options || []).some((opt) =>
+          /其他/.test(String(opt || "")),
+        );
+        const otherInput = hasOtherOption
+          ? `
+            <div id="${domKey}-other-wrap" class="hidden pt-1">
+              <input
+                id="${domKey}-other"
+                type="text"
+                class="w-full rounded-2xl border border-slate-200 px-4 py-3 bg-slate-50 text-sm leading-6 focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition"
+                placeholder="請填寫其他內容"
+              />
+            </div>
+          `
+          : "";
 
         return `
           <article class="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 md:p-5">
             ${title}
             <div class="space-y-3">${options}</div>
+            ${otherInput}
           </article>
         `;
       }
@@ -195,6 +222,40 @@
     el.questionContainer.innerHTML =
       html ||
       '<p class="text-sm text-slate-500 leading-7">目前沒有進階維度題目。</p>';
+
+    bindOtherOptionInputs();
+  }
+
+  function bindOtherOptionInputs() {
+    const otherRadios = document.querySelectorAll(
+      'input[type="radio"][data-other-target]',
+    );
+
+    otherRadios.forEach((otherRadio) => {
+      const name = otherRadio.getAttribute("name");
+      const targetId = otherRadio.getAttribute("data-other-target");
+      if (!name || !targetId) return;
+
+      const update = () => {
+        const wrap = document.getElementById(`${targetId}-wrap`);
+        const input = document.getElementById(targetId);
+        if (!wrap || !input) return;
+
+        if (otherRadio.checked) {
+          wrap.classList.remove("hidden");
+        } else {
+          wrap.classList.add("hidden");
+        }
+      };
+
+      const group = document.querySelectorAll(
+        `input[type="radio"][name="${name}"]`,
+      );
+      group.forEach((radio) => {
+        radio.addEventListener("change", update);
+      });
+      update();
+    });
   }
 
   function clearMessage() {
@@ -351,6 +412,15 @@
         const inputs = document.getElementsByName(domKey);
         const checked = Array.from(inputs).find((item) => item.checked);
         value = checked ? checked.value : "";
+
+        if (q.type === "single" && value === "__OTHER__") {
+          const otherInput = document.getElementById(`${domKey}-other`);
+          const otherText = otherInput ? otherInput.value.trim() : "";
+          if (!otherText && q.required) {
+            throw new Error(`請填寫「${q.title}」的其他內容。`);
+          }
+          value = otherText ? `其他：${otherText}` : "";
+        }
       } else {
         const input = document.getElementById(domKey);
         value = input ? input.value.trim() : "";
