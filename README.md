@@ -1,37 +1,64 @@
 # AI Rhythm Assessment
 
-A Google Apps Script web application for collecting questionnaire responses and generating personalized AI-powered rhythm assessment reports.
-
-This project is designed to support a structured questionnaire workflow: users submit their background information and assessment answers, the system generates a personalized report with Gemini, converts the result into PDF, and sends it to the user by email.
+An AI-powered follow-up questionnaire platform built around the book **《節奏工作法》**.  
+This project is designed for post-course reflection, helping participants review their recent work rhythm, complete a structured questionnaire, and receive a personalized AI-generated response report.
 
 ## Overview
 
-AI Rhythm Assessment is a lightweight assessment platform built with Google Apps Script and HTML. It is intended for scenarios such as coaching programs, consulting workflows, learning diagnostics, or structured self-evaluation experiences.
+**AI Rhythm Assessment** is a Google Apps Script web application created for courses and public sessions centered on **《節奏工作法》**.
 
-The application currently supports:
+Instead of serving as a generic survey tool, this project is specifically designed as a **post-session questionnaire and feedback experience**. After attending a course or public lecture related to the book, participants can fill out a structured rhythm assessment form, and the system will generate a personalized AI response based on their answers.
 
-- Collecting learner background information
-- Running a personalized rhythm assessment questionnaire
-- Generating AI-based personalized reports with Gemini
-- Exporting reports as PDF
-- Sending the generated report by email
+The application combines:
+
+- a course follow-up questionnaire
+- structured self-reflection
+- AI-generated personalized feedback
+- PDF report generation
+- email delivery
+
+## Purpose
+
+This project was built to extend the learning experience of **《節奏工作法》** beyond the course itself.
+
+Through the questionnaire, participants can:
+
+- reflect on their recent work and life rhythm
+- identify patterns across multiple dimensions
+- receive AI-organized feedback and interpretation
+- turn abstract self-observation into more actionable insights
 
 ## Features
 
-- **Web-based questionnaire interface**  
-  A browser-based form for collecting user profile data and questionnaire responses.
+- **Post-course questionnaire interface**  
+  A web-based form for collecting participant background information and rhythm assessment answers.
 
-- **Personalized AI report generation**  
-  Uses Gemini to generate customized assessment reports based on submitted answers.
+- **Book-centered assessment design**  
+  The questionnaire is designed around the ideas and context of **《節奏工作法》**, rather than being a generic productivity form.
 
-- **PDF export**  
-  Converts generated report content into a PDF file for easier delivery and archiving.
+- **AI-generated personalized response**  
+  After submission, the system uses Gemini to generate a personalized analysis report based on the participant’s answers.
+
+- **PDF report generation**  
+  The AI response can be exported as a PDF file for archiving and sharing.
 
 - **Email delivery**  
-  Sends the generated PDF report directly to the respondent’s email.
+  Participants can receive the generated report directly in their inbox.
 
-- **Questionnaire versioning support**  
-  Supports multiple questionnaire versions through separated version configuration logic.
+- **Versioned questionnaire support**  
+  The app supports questionnaire version control, making it easier to iterate and update course content over time.
+
+## How It Works
+
+1. A participant opens the web app.
+2. The participant fills in basic background information and completes the questionnaire.
+3. The submitted answers are processed by the Apps Script backend.
+4. The system builds a prompt using:
+   - participant information
+   - questionnaire answers
+   - predefined prompt context
+5. Gemini generates a personalized response report.
+6. The report is saved, converted into PDF, and can be sent by email.
 
 ## Tech Stack
 
@@ -40,178 +67,137 @@ The application currently supports:
 - **Google Gemini API**
 - **Google Drive API**
 - **Google Sheets API**
-- **Google MailApp**
+- **MailApp**
 
 ## Project Structure
 
 ```text
 .
+├── README.md              # Project documentation
 ├── appsscript.json        # Apps Script manifest and permissions
 ├── code.gs                # Main backend logic
-├── index.html             # Web app UI
+├── index.html             # Main questionnaire page
 ├── javascript.html        # Frontend interaction logic
-├── prompt_context.gs      # Prompt context / report generation content
-├── question_versions.gs   # Questionnaire version definitions
-└── README.md
+├── prompt_context.gs      # AI prompt context and response template logic
+└── question_versions.gs   # Questionnaire version definitions
 ```
 
-## How It Works
+## Core Workflow
 
-1. A user opens the web app and fills out the questionnaire.
-2. The submitted answers are processed by the Apps Script backend.
-3. The system builds a Gemini prompt from:
+The backend currently supports the following flow:
 
-   * learner background information
-   * questionnaire answers
-   * report context template
-4. Gemini generates a personalized report.
-5. The report is converted into a PDF.
-6. The PDF is sent to the user by email.
-
-## Requirements
-
-Before deploying this project, make sure you have:
-
-* A Google account with access to Google Apps Script
-* A valid Gemini API key
-* Google Drive API enabled
-* Google Sheets API enabled
-* Permission to send email via Apps Script
+* load questionnaire content by version `.../exec?v=v1`
+* collect participant responses
+* generate AI report with Gemini
+* create a PDF copy of the report
+* save the generated file to Google Drive
+* record submission data
+* send the PDF report by email
 
 ## Setup
 
-### 1. Clone this repository
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/YCNeo/ai-rhythm-assessment.git
 ```
 
-### 2. Create a new Apps Script project
+### 2. Create an Apps Script project
 
-Create a new Google Apps Script project and copy the repository files into it.
+Create a new Google Apps Script project and copy the project files into it.
 
-### 3. Configure `appsscript.json`
+### 3. Configure required services
 
-This project requires the following Apps Script configuration:
+This project relies on:
 
-* V8 runtime
-* Web App deployment
-* Drive and Sheets advanced services
-* External request permission
-* Email sending permission
+* Google Apps Script V8 runtime
+* Google Drive advanced service
+* Google Sheets advanced service
+* external HTTP requests
+* MailApp permission
 
 ### 4. Add your Gemini API key
 
-In `code.gs`, replace the placeholder API key:
+Update the API key setting in `code.gs`.
+
+Example:
 
 ```javascript
 const API_KEY = "YOUR_API_KEY";
 ```
 
-with your actual Gemini API key.
-
 ### 5. Enable Advanced Google Services
 
 In the Apps Script editor, enable:
 
-* **Google Sheets API**
-* **Google Drive API**
+* Google Drive API
+* Google Sheets API
 
-You may also need to enable the corresponding APIs in the Google Cloud project linked to your Apps Script project.
+You may also need to enable the corresponding APIs in the linked Google Cloud project.
 
-### 6. Deploy as Web App
+### 6. Deploy as a Web App
 
-Deploy the project as a Web App.
+Deploy the script as a Web App.
 
-Recommended settings:
+Recommended deployment settings:
 
-* **Execute as:** User deploying the app
-* **Who has access:** Anyone
+* **Execute as:** Me
+* **Who has access:** Anyone / Anyone with the link
+  (depending on your actual usage scenario)
 
 ## Configuration Notes
 
 ### Questionnaire Versions
 
-Questionnaire content is versioned in:
+Questionnaire content is managed through:
 
 * `question_versions.gs`
 
-You can extend this file to support multiple diagnostic flows or audience-specific question sets.
+This makes it possible to maintain different versions for future courses, workshops, or revised question flows.
 
 ### Prompt Context
 
-Prompt-building logic and contextual report content are managed through:
+AI response logic is managed through:
 
 * `prompt_context.gs`
 
-You can customize the generated report style, structure, and tone there.
+You can adjust:
 
-### PDF and Email Delivery
+* response tone
+* report structure
+* prompt instructions
+* interpretation style
 
-PDF generation and email sending are handled in the Apps Script backend.
-Make sure the deployment account has permission to:
+### Storage and Delivery
 
-* create or access Drive files
-* generate PDFs
-* send emails through Apps Script
+The application currently uses Google services to support:
 
-## Example Use Cases
+* response record storage
+* generated PDF storage
+* email delivery to participants
 
-* Coaching intake assessment
-* Learning rhythm diagnostics
-* Personal productivity evaluation
-* AI-assisted consulting workflows
-* Educational or workshop follow-up reports
+## Use Cases
+
+This project is suitable for scenarios such as:
+
+* post-course questionnaires
+* public talk follow-up forms
+* reflection-based workshop feedback
+* book-centered learning experiences
+* AI-assisted self-review tools
 
 ## Security Notes
 
-This project currently appears to be configured as an anonymously accessible web app. If you plan to use it in production, consider reviewing:
+Because this project is deployed as a web app and handles participant data, you should review the following before using it in production or public-facing scenarios:
 
-* authentication requirements
-* API key storage strategy
-* email sending limits
-* access permissions for generated files
-* personal data handling and privacy compliance
+* API key management
+* access permissions
+* Google Drive file visibility
+* email sending quota
+* personal data handling and privacy practices
 
-For better security, avoid hardcoding secrets directly in source files for production deployments. Consider using a more secure secret management approach where possible.
-
-## Future Improvements
-
-Possible improvements for this project:
-
-* Save submissions to Google Sheets automatically
-* Add admin dashboard for response review
-* Support multilingual reports
-* Add authentication and access control
-* Improve UI/UX for mobile devices
-* Store generated reports in structured Drive folders
-* Add retry / logging / monitoring for report generation failures
-
-## Repository Description Suggestion
-
-You can use this as the GitHub repository description:
-
-> Google Apps Script web app for personalized rhythm assessment, AI-generated reports, PDF export, and email delivery.
-
-## License
-
-Add your preferred license here, for example:
-
-* MIT License
-* Apache-2.0
-* Proprietary / All rights reserved
-
-If you do not want others to freely reuse the code, do not leave this section blank—explicitly state your intended license.
+For long-term maintenance, avoid hardcoding secrets directly in source files if possible.
 
 ## Author
 
-Created by Neo Pan.
-
----
-
-If you find this project useful, consider adding documentation for:
-
-* deployment screenshots
-* questionnaire schema
-* sample prompt design
-* report output examples
+Created by **Neo Pan**.
